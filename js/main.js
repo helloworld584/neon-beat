@@ -8,6 +8,7 @@ import { gameState } from './state.js';
 import { InputHandler } from './input.js';
 import { hitLane, update } from './game.js';
 import { Renderer } from './renderer.js';
+import { musicPlayer } from './music.js';
 
 // roundRect polyfill (Safari < 15.4)
 if (!CanvasRenderingContext2D.prototype.roundRect) {
@@ -45,6 +46,7 @@ class NeonBeatGame {
 
   async init() {
     await loadAssets();
+    musicPlayer.init();
     gameState.gameState = GAME_STATES.TITLE;
     this.startGameLoop();
   }

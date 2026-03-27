@@ -28,6 +28,11 @@ class GameState {
     this.keyDown = [false, false, false, false];
     this.keyFlash = [0, 0, 0, 0];
     this.pulse = 0;
+    // Music state
+    this.musicSelectCursor = 0;
+    this.selectedTrack = 0;
+    this.isMuted = false;
+    this.trackNameT = 0;
   }
 
   startGame() {
@@ -43,6 +48,7 @@ class GameState {
     this.keyFlash = [0, 0, 0, 0];
     this.startTime = performance.now();
     this.songTime = 0;
+    this.trackNameT = 2000;
     this.gameState = GAME_STATES.PLAYING;
   }
 
@@ -57,6 +63,7 @@ class GameState {
     
     this.judgeT = Math.max(0, this.judgeT - dt);
     this.glitchT = Math.max(0, this.glitchT - dt);
+    this.trackNameT = Math.max(0, this.trackNameT - dt);
     this.effects = this.effects.filter(e => (e.t -= dt) > 0);
   }
 

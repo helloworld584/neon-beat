@@ -2,7 +2,7 @@
 // NEON BEAT – Rendering System
 // ================================================================
 
-import { GAME, INPUT, VISUAL, GAME_STATES } from './constants.js';
+import { GAME, INPUT, VISUAL, GAME_STATES, TRACKS, VIBE_COLORS } from './constants.js';
 import { getImage } from './assets.js';
 import { gameState } from './state.js';
 
@@ -16,9 +16,12 @@ export class Renderer {
   render() {
     // Clear and render to offscreen buffer
     this.offCtx.clearRect(0, 0, GAME.W, GAME.H);
-    
+
     if (gameState.gameState === GAME_STATES.TITLE) {
       this.renderTitle(this.offCtx);
+      this.drawScanlines(this.offCtx);
+    } else if (gameState.gameState === GAME_STATES.MUSIC_SELECT) {
+      this.renderMusicSelect(this.offCtx);
       this.drawScanlines(this.offCtx);
     } else {
       this.drawScrollBG(this.offCtx);
@@ -29,6 +32,8 @@ export class Renderer {
       this.drawEffects(this.offCtx);
       this.drawHUDFrame(this.offCtx);
       this.drawHUD(this.offCtx);
+      this.drawMuteButton(this.offCtx);
+      this.drawTrackName(this.offCtx);
       this.drawJudgment(this.offCtx);
       this.drawScanlines(this.offCtx);
     }
@@ -442,6 +447,245 @@ export class Renderer {
     }
   }
 
+  // ── Mute button (top-left during gameplay) ──────────────────────
+  drawMuteButton(rc) {
+    const x = 8, y = 8, w = 50, h = 24;
+    rc.save();
+    rc.fillStyle = gameState.isMuted ? 'rgba(255,40,40,0.35)' : 'rgba(0,0,0,0.55)';
+    rc.strokeStyle = gameState.isMuted ? '#ff4444' : 'rgba(255,255,255,0.25)';
+    rc.lineWidth = 1;
+    rc.beginPath();
+    rc.roundRect(x, y, w, h, 5);
+    rc.fill();
+    rc.stroke();
+    rc.font = 'bold 9px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = gameState.isMuted ? '#ff6666' : 'rgba(255,255,255,0.55)';
+    rc.fillText(gameState.isMuted ? '\u266a OFF' : '\u266a  ON', x + w / 2, y + h / 2);
+    rc.restore();
+  }
+
+  // ── Track name overlay (shown 2s after track selection) ──────────
+  drawTrackName(rc) {
+    if (gameState.trackNameT <= 0) return;
+    const track = TRACKS[gameState.selectedTrack];
+    if (!track) return;
+
+    const elapsed = 2000 - gameState.trackNameT;
+    const fadeIn  = Math.min(1, elapsed / 350);
+    const fadeOut = Math.min(1, gameState.trackNameT / 350);
+    const alpha   = Math.min(fadeIn, fadeOut);
+
+    rc.save();
+    rc.globalAlpha = alpha;
+    const text = `\u266a  ${track.title}`;
+    rc.font = 'bold 12px Orbitron,monospace';
+    const tw = rc.measureText(text).width + 26;
+    const px = (GAME.W - tw) / 2;
+    const py = 62;
+    const ph = 26;
+
+    rc.fillStyle = 'rgba(0,0,0,0.75)';
+    rc.strokeStyle = 'rgba(0,255,255,0.6)';
+    rc.lineWidth = 1;
+    rc.shadowBlur = 10;
+    rc.shadowColor = '#00ffff';
+    rc.beginPath();
+    rc.roundRect(px, py, tw, ph, 6);
+    rc.fill();
+    rc.stroke();
+
+    rc.shadowBlur = 0;
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = '#ffffff';
+    rc.fillText(text, GAME.W / 2, py + ph / 2);
+    rc.restore();
+  }
+
+  // ── Music selection screen ────────────────────────────────────────
+  renderMusicSelect(rc) {
+    // Background
+    rc.fillStyle = '#04001a';
+    rc.fillRect(0, 0, GAME.W, GAME.H);
+
+    const sky = getImage('bg_sky');
+    if (sky) {
+      const th = sky.naturalHeight * (GAME.W / sky.naturalWidth);
+      const offset = gameState.bgSky % th;
+      rc.save();
+      rc.globalAlpha = 0.30;
+      for (let y = -offset; y < GAME.H; y += th) {
+        rc.drawImage(sky, 0, y, GAME.W, th);
+      }
+      rc.restore();
+    }
+
+    // Panel
+    const px = 15, py = 58, pw = 360, ph = 724;
+    rc.save();
+    rc.fillStyle = 'rgba(4,0,24,0.93)';
+    rc.shadowBlur = 28;
+    rc.shadowColor = '#00ffff';
+    rc.beginPath();
+    rc.roundRect(px, py, pw, ph, 10);
+    rc.fill();
+    rc.strokeStyle = 'rgba(0,255,255,0.45)';
+    rc.lineWidth = 1.5;
+    rc.stroke();
+    rc.restore();
+
+    // hud_frame overlay on panel
+    const frame = getImage('hud_frame');
+    if (frame) {
+      rc.save();
+      rc.globalAlpha = 0.14;
+      rc.drawImage(frame, px, py, pw, ph);
+      rc.restore();
+    }
+
+    // Header
+    rc.save();
+    rc.font = '900 19px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = '#00ffff';
+    rc.shadowBlur = 18;
+    rc.shadowColor = '#00ffff';
+    rc.fillText('SELECT TRACK', GAME.W / 2, py + 30);
+    rc.restore();
+
+    // Divider
+    rc.save();
+    rc.strokeStyle = 'rgba(0,255,255,0.22)';
+    rc.lineWidth = 1;
+    rc.beginPath();
+    rc.moveTo(px + 20, py + 50);
+    rc.lineTo(px + pw - 20, py + 50);
+    rc.stroke();
+    rc.restore();
+
+    // Track cards
+    const cardX  = px + 10;
+    const cardW  = pw - 20;
+    const cardH  = 77;
+    const startY = py + 58;
+
+    for (let i = 0; i < TRACKS.length; i++) {
+      const track    = TRACKS[i];
+      const cardY    = startY + i * cardH;
+      const sel      = i === gameState.musicSelectCursor;
+      const vc       = VIBE_COLORS[track.vibe] || '#ffffff';
+      const [vr, vg, vb] = [
+        parseInt(vc.slice(1, 3), 16),
+        parseInt(vc.slice(3, 5), 16),
+        parseInt(vc.slice(5, 7), 16),
+      ];
+
+      // Card bg
+      rc.save();
+      rc.fillStyle = sel ? 'rgba(0,255,255,0.07)' : 'rgba(255,255,255,0.025)';
+      rc.strokeStyle = sel ? 'rgba(0,255,255,0.55)' : 'rgba(255,255,255,0.07)';
+      rc.lineWidth = sel ? 1.5 : 1;
+      rc.shadowBlur = sel ? 10 : 0;
+      rc.shadowColor = '#00ffff';
+      rc.beginPath();
+      rc.roundRect(cardX, cardY + 3, cardW, cardH - 6, 6);
+      rc.fill();
+      rc.stroke();
+      rc.restore();
+
+      // Selected left bar
+      if (sel) {
+        rc.save();
+        rc.fillStyle = '#00ffff';
+        rc.shadowBlur = 8;
+        rc.shadowColor = '#00ffff';
+        rc.fillRect(cardX, cardY + 10, 3, cardH - 20);
+        rc.restore();
+      }
+
+      const midY  = cardY + cardH / 2;
+      const lineA = midY - 11;
+      const lineB = midY + 10;
+
+      // Track number
+      rc.save();
+      rc.font = `bold 10px Orbitron,monospace`;
+      rc.textAlign = 'left';
+      rc.textBaseline = 'middle';
+      rc.fillStyle = sel ? '#00ffff' : 'rgba(255,255,255,0.28)';
+      rc.shadowBlur = sel ? 5 : 0;
+      rc.shadowColor = '#00ffff';
+      rc.fillText(`${i + 1}.`, cardX + 14, lineA);
+      rc.restore();
+
+      // Track title
+      rc.save();
+      rc.font = `bold 13px Orbitron,monospace`;
+      rc.textAlign = 'left';
+      rc.textBaseline = 'middle';
+      rc.fillStyle = sel ? '#ffffff' : 'rgba(255,255,255,0.82)';
+      rc.shadowBlur = sel ? 5 : 0;
+      rc.shadowColor = '#fff';
+      rc.fillText(track.title, cardX + 38, lineA, 185);
+      rc.restore();
+
+      // Artist
+      rc.save();
+      rc.font = `400 10px Orbitron,monospace`;
+      rc.textAlign = 'left';
+      rc.textBaseline = 'middle';
+      rc.fillStyle = 'rgba(255,255,255,0.38)';
+      rc.fillText(track.artist, cardX + 38, lineB);
+      rc.restore();
+
+      // Vibe pill (top-right of card)
+      rc.save();
+      rc.font = 'bold 9px Orbitron,monospace';
+      rc.textBaseline = 'middle';
+      rc.textAlign = 'center';
+      const vibeW = rc.measureText(track.vibe).width + 14;
+      const vx = cardX + cardW - vibeW - 10;
+      const vy = lineA - 9;
+      const vh = 18;
+      rc.fillStyle = `rgba(${vr},${vg},${vb},0.18)`;
+      rc.strokeStyle = vc;
+      rc.lineWidth = 1;
+      rc.beginPath();
+      rc.roundRect(vx, vy, vibeW, vh, 9);
+      rc.fill();
+      rc.stroke();
+      rc.fillStyle = vc;
+      rc.shadowBlur = 4;
+      rc.shadowColor = vc;
+      rc.fillText(track.vibe, vx + vibeW / 2, vy + vh / 2);
+      rc.restore();
+
+      // Preview hint (selected card only)
+      if (sel) {
+        rc.save();
+        rc.font = '400 9px Orbitron,monospace';
+        rc.textAlign = 'right';
+        rc.textBaseline = 'middle';
+        rc.fillStyle = 'rgba(255,255,255,0.32)';
+        rc.fillText('\u25b6 SPACE', cardX + cardW - 10, lineB);
+        rc.restore();
+      }
+    }
+
+    // Footer hints
+    rc.save();
+    rc.font = '400 9px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.28)';
+    rc.fillText('\u2191\u2193 NAVIGATE  \u2022  SPACE PREVIEW  \u2022  ENTER SELECT  \u2022  ESC BACK',
+      GAME.W / 2, py + ph - 20);
+    rc.restore();
+  }
+
   renderGameOver(rc) {
     rc.save();
     rc.fillStyle = 'rgba(0,0,0,0.75)';
@@ -477,7 +721,7 @@ export class Renderer {
       rc.fillStyle = '#fff';
       rc.shadowBlur = 6;
       rc.shadowColor = '#fff';
-      rc.fillText('PRESS  R  TO RETRY', GAME.W / 2, GAME.H / 2 + 88);
+      rc.fillText('PRESS  R  TO CONTINUE', GAME.W / 2, GAME.H / 2 + 88);
     }
     rc.restore();
   }
