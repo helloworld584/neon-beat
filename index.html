@@ -236,7 +236,7 @@ function startGame(){
 function update(dt){
   songTime = performance.now()-startTime;
   for(const n of notes){
-    if(n.state==='hit') continue;
+    if(n.state==='hit' || n.state==='missed') continue;
     const ttHit = n.time - songTime;
     if(ttHit <= LEAD_MS){
       n.state='active';
