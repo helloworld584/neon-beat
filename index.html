@@ -162,7 +162,7 @@ let pulse=0;
 
 // ── Input ──────────────────────────────────────────────────────
 function onPress(lane){
-  if(gs==='TITLE'){ startGame(); return; }
+  if(gs==='TITLE'||gs==='GAMEOVER'){ startGame(); return; }
   if(gs!=='PLAYING') return;
   keyDown[lane]=true; keyFlash[lane]=200;
   hitLane(lane);
@@ -213,7 +213,7 @@ function hitLane(lane){
 
   best.state='hit';
   combo++; if(combo>maxCombo) maxCombo=combo;
-  const mult = 1 + Math.floor((combo-1)/10)*0.5;
+  const mult = 1 + Math.floor(combo/10)*0.5;
   score += Math.floor((grade==='PERFECT'?300:100)*mult);
   judgeText=grade; judgeT=550;
 
@@ -229,6 +229,7 @@ function startGame(){
   score=0; combo=0; maxCombo=0;
   notes=makeChart(); effects=[];
   judgeText=''; judgeT=0; glitchT=0;
+  keyDown=[false,false,false,false]; keyFlash=[0,0,0,0];
   startTime=performance.now(); songTime=0;
   gs='PLAYING';
 }
