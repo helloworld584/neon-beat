@@ -9,6 +9,7 @@ class MusicPlayer {
     this.audio = null;
     this.previewTimer = null;
     this.isPreviewing = false;
+    this._pendingPlay = false;
   }
 
   init() {
@@ -27,7 +28,19 @@ class MusicPlayer {
   play(index) {
     this.stopPreview();
     this._load(index, true);
-    this.audio.play().catch(() => {});
+    this._pendingPlay = false;
+    this.audio.play().catch(() => {
+      // Autoplay blocked — will retry on next user gesture via resumeIfPending()
+      this._pendingPlay = true;
+    });
+  }
+
+  // Call on any user gesture during gameplay to unblock autoplay-gated audio
+  resumeIfPending() {
+    if (this._pendingPlay && this.audio && this.audio.paused) {
+      this._pendingPlay = false;
+      this.audio.play().catch(() => {});
+    }
   }
 
   preview(index) {

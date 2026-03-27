@@ -5,6 +5,7 @@
 import { GAME, INPUT, VISUAL, GAME_STATES, TRACKS, VIBE_COLORS } from './constants.js';
 import { getImage } from './assets.js';
 import { gameState } from './state.js';
+import { musicPlayer } from './music.js';
 
 export class Renderer {
   constructor(ctx, offCtx, offCanvas) {
@@ -32,6 +33,7 @@ export class Renderer {
       this.drawEffects(this.offCtx);
       this.drawHUDFrame(this.offCtx);
       this.drawHUD(this.offCtx);
+      this.drawHUDProgress(this.offCtx);
       this.drawMuteButton(this.offCtx);
       this.drawTrackName(this.offCtx);
       this.drawJudgment(this.offCtx);
@@ -198,7 +200,9 @@ export class Renderer {
       rc.translate(effect.x, effect.y);
       
       if (hitFx) {
+        rc.globalCompositeOperation = 'screen';
         rc.drawImage(hitFx, -size / 2, -size / 2, size, size);
+        rc.globalCompositeOperation = 'source-over';
       } else {
         rc.strokeStyle = effect.grade === 'PERFECT' ? '#ffff00' : '#00ffff';
         rc.lineWidth = 3;
@@ -445,6 +449,58 @@ export class Renderer {
       rc.fillText(INPUT.KEY_LABELS[i], cx, keyY);
       rc.restore();
     }
+  }
+
+  // ── Song progress bar ────────────────────────────────────────────
+  drawHUDProgress(rc) {
+    const audio = musicPlayer.audio;
+    if (!audio || !audio.duration || isNaN(audio.duration)) return;
+
+    const track = TRACKS[gameState.selectedTrack];
+    const progress = Math.max(0, Math.min(1, audio.currentTime / audio.duration));
+    const barX = GAME.W * 0.1;
+    const barW = GAME.W * 0.8;
+    const barY = 67;
+    const barH = 6;
+
+    rc.save();
+
+    // Track title — top of frame, centered, muted gray
+    rc.font = '400 9px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.32)';
+    rc.fillText(track ? track.title.toUpperCase() : '', GAME.W / 2, 57);
+
+    // Progress bar track
+    rc.fillStyle = 'rgba(255,255,255,0.07)';
+    rc.beginPath();
+    rc.roundRect(barX, barY, barW, barH, 3);
+    rc.fill();
+
+    // Progress bar fill — cyan→magenta gradient
+    if (progress > 0) {
+      const grad = rc.createLinearGradient(barX, 0, barX + barW, 0);
+      grad.addColorStop(0, '#00ffff');
+      grad.addColorStop(1, '#ff00ff');
+      rc.fillStyle = grad;
+      rc.shadowBlur = 5;
+      rc.shadowColor = '#00ffff';
+      rc.beginPath();
+      rc.roundRect(barX, barY, barW * progress, barH, 3);
+      rc.fill();
+    }
+
+    // Time — bottom-right, cyan
+    const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    rc.shadowBlur = 0;
+    rc.font = '400 9px Orbitron,monospace';
+    rc.textAlign = 'right';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = '#00ffff';
+    rc.fillText(`${fmt(audio.currentTime)} / ${fmt(audio.duration)}`, GAME.W - 14, 79);
+
+    rc.restore();
   }
 
   // ── Mute button (top-left during gameplay) ──────────────────────

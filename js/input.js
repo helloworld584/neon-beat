@@ -138,6 +138,7 @@ export class InputHandler {
 
     if (gameState.gameState !== GAME_STATES.PLAYING) return;
 
+    musicPlayer.resumeIfPending();
     gameState.keyDown[lane] = true;
     gameState.keyFlash[lane] = 200;
     this.onHitLane(lane);
