@@ -202,7 +202,19 @@ export class InputHandler {
       }
     }
 
-    // Lane tap → drives TITLE→SELECT, GAMEOVER→TITLE, PLAYING hits
+    // Game over buttons
+    if (gameState.gameState === GAME_STATES.GAMEOVER) {
+      const retryX = (GAME.W - 190) / 2, retryY = GAME.H / 2 + 80, retryW = 190, retryH = 40;
+      if (tx >= retryX && tx < retryX + retryW && ty >= retryY && ty < retryY + retryH) {
+        this._retryGame();
+      } else {
+        musicPlayer.stop();
+        gameState.gameState = GAME_STATES.MUSIC_SELECT;
+      }
+      return;
+    }
+
+    // Lane tap → drives TITLE→SELECT, PLAYING hits
     const lane = Math.floor(tx / GAME.LANE_W);
     if (lane >= 0 && lane < 4) {
       this._touchLanes.set(id, lane);
@@ -251,6 +263,12 @@ export class InputHandler {
   }
 
   // ── Shared helpers ─────────────────────────────────────────────────
+  _retryGame() {
+    musicPlayer.stop();
+    gameState.startGame(null);
+    musicPlayer.play(gameState.selectedTrack);
+  }
+
   _startGame() {
     const cursor = gameState.musicSelectCursor;
     gameState.selectedTrack = cursor;
@@ -265,12 +283,6 @@ export class InputHandler {
     if (gameState.gameState === GAME_STATES.TITLE) {
       musicPlayer.playBgm();
       gameState.gameState = GAME_STATES.MUSIC_SELECT;
-      return;
-    }
-
-    if (gameState.gameState === GAME_STATES.GAMEOVER) {
-      musicPlayer.stop();
-      gameState.gameState = GAME_STATES.TITLE;
       return;
     }
 
