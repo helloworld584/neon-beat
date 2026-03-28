@@ -191,27 +191,46 @@ export class Renderer {
     }
   }
 
+  // Build a black-background-removed version of hit_fx once, on first use.
+  // Maps each pixel's luminance to its alpha so pure black → transparent.
+  _buildHitFxCanvas(img) {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    const tmp = document.createElement('canvas');
+    tmp.width = w; tmp.height = h;
+    const ctx = tmp.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const id = ctx.getImageData(0, 0, w, h);
+    const d = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+      d[i + 3] = Math.min(255, Math.round(lum * 2.2)); // luminance → alpha
+    }
+    ctx.putImageData(id, 0, 0);
+    return tmp;
+  }
+
   drawEffects(rc) {
-    const hitFx = getImage('hit_fx');
-    
+    const hitFxRaw = getImage('hit_fx');
+    if (hitFxRaw && !this._hitFxCanvas) {
+      this._hitFxCanvas = this._buildHitFxCanvas(hitFxRaw);
+    }
+    const hitFx = this._hitFxCanvas || null;
+
     for (const effect of gameState.effects) {
       const t = effect.t / effect.max;
       const scale = 1 + (1 - t) * 1.8;
       const size = 64 * scale;
-      
+
       rc.save();
       rc.globalAlpha = Math.pow(t, 0.6);
       rc.translate(effect.x, effect.y);
-      
+
       if (hitFx) {
         if (!effect._drawn) {
           console.log(`[hit_fx] drawing effect grade=${effect.grade} at (${effect.x.toFixed(0)},${effect.y.toFixed(0)}) size=${size.toFixed(1)}`);
           effect._drawn = true;
         }
-        rc.save();
-        rc.globalCompositeOperation = 'lighter';
         rc.drawImage(hitFx, -size / 2, -size / 2, size, size);
-        rc.restore();
       } else {
         rc.strokeStyle = effect.grade === 'PERFECT' ? '#ffff00' : '#00ffff';
         rc.lineWidth = 3;
@@ -345,8 +364,20 @@ export class Renderer {
 
     // ── Song progress bar (immediately after frame) ─────────────────
     const audio = musicPlayer.audio;
-    const dur = audio && audio.duration;
-    const progress = (dur && !isNaN(dur)) ? Math.max(0, Math.min(1, audio.currentTime / dur)) : 0;
+    const audioDur = audio && isFinite(audio.duration) && audio.duration > 0
+      ? audio.duration : null;
+
+    // Fallback: derive progress from songTime when audio duration unavailable
+    const notes = gameState.notes;
+    const fallbackDur = notes && notes.length
+      ? (notes[notes.length - 1].time + 3500) / 1000   // ms → seconds
+      : null;
+    const fallbackElapsed = gameState.songTime / 1000;
+
+    const totalDur    = audioDur ?? fallbackDur;
+    const elapsedSec  = audioDur ? audio.currentTime : fallbackElapsed;
+    const progress    = totalDur ? Math.max(0, Math.min(1, elapsedSec / totalDur)) : 0;
+
     const barX = GAME.W * 0.1;
     const barY = 67;
     const barW = GAME.W * 0.8;
@@ -356,7 +387,7 @@ export class Renderer {
 
     rc.save();
 
-    // Track title — top-left inside hud area, 11px gray
+    // Track title — top-left, 11px gray
     rc.font = '400 11px Orbitron,monospace';
     rc.textAlign = 'left';
     rc.textBaseline = 'bottom';
@@ -364,10 +395,13 @@ export class Renderer {
     rc.fillText(track ? track.title.toUpperCase() : '', barX, barY - 2);
 
     // Progress bar background
-    rc.fillStyle = '#1a1a1a';
+    rc.fillStyle = '#2a2a2a';
+    rc.strokeStyle = 'rgba(255,255,255,0.08)';
+    rc.lineWidth = 1;
     rc.beginPath();
     rc.roundRect(barX, barY, barW, barH, 3);
     rc.fill();
+    rc.stroke();
 
     // Filled portion — cyan→magenta gradient
     if (progress > 0) {
@@ -382,14 +416,14 @@ export class Renderer {
       rc.fill();
     }
 
-    // Elapsed / total — bottom-right inside hud area, 11px cyan
-    if (dur && !isNaN(dur)) {
+    // Elapsed / total — bottom-right, 11px cyan
+    if (totalDur) {
       rc.shadowBlur = 0;
       rc.font = '400 11px Orbitron,monospace';
       rc.textAlign = 'right';
       rc.textBaseline = 'top';
-      rc.fillStyle = '#00ffff';
-      rc.fillText(`${fmt(audio.currentTime)} / ${fmt(dur)}`, barX + barW, barY + barH + 3);
+      rc.fillStyle = audioDur ? '#00ffff' : 'rgba(0,255,255,0.45)';
+      rc.fillText(`${fmt(elapsedSec)} / ${fmt(totalDur)}`, barX + barW, barY + barH + 3);
     }
 
     rc.restore();

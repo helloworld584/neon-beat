@@ -56,12 +56,12 @@ class NeonBeatGame {
       const deltaTime = Math.min(timestamp - this.lastTimestamp, 50);
       this.lastTimestamp = timestamp;
 
-      // Update timers
-      gameState.updateTimers(deltaTime);
-
-      // Update game logic
-      if (gameState.gameState === GAME_STATES.PLAYING) {
-        update(deltaTime);
+      // Update timers and game logic — skip both when ESC confirm is open
+      if (!gameState.escConfirm) {
+        gameState.updateTimers(deltaTime);
+        if (gameState.gameState === GAME_STATES.PLAYING) {
+          update(deltaTime);
+        }
       }
 
       // Render
