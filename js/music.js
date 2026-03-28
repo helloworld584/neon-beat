@@ -3,7 +3,6 @@
 // ================================================================
 
 import { TRACKS } from './constants.js';
-import { analyzeAudio } from './beatdetect.js';
 
 class MusicPlayer {
   constructor() {
@@ -14,8 +13,6 @@ class MusicPlayer {
     // BGM state (title / music-select background music)
     this._bgmActive = false;
     this._bgmTime = 0;     // saved position for restore after preview
-    // Per-track analysis cache: index → 'pending' | {bpm, beatMs, beats}
-    this._analysisCache = {};
   }
 
   init() {
@@ -145,33 +142,6 @@ class MusicPlayer {
 
   setMuted(muted) {
     if (this.audio) this.audio.muted = muted;
-  }
-
-  // ── Beat analysis ─────────────────────────────────────────────────
-  // Start async analysis for a track. Results cached by index.
-  async startAnalysis(index) {
-    if (this._analysisCache[index] !== undefined) return; // already running or done
-    this._analysisCache[index] = 'pending';
-    try {
-      const src = `assets/music/${TRACKS[index].file}`;
-      const result = await analyzeAudio(src);
-      this._analysisCache[index] = result;
-      console.log(`[MusicPlayer] analysis[${index}] done: bpm=${result.bpm} beats=${result.beats.length}`);
-    } catch (e) {
-      console.warn(`[MusicPlayer] analysis[${index}] failed:`, e);
-      delete this._analysisCache[index];
-    }
-  }
-
-  // Returns analysis result if done, or null if pending/unavailable.
-  getAnalysis(index) {
-    const v = this._analysisCache[index];
-    return (v && v !== 'pending') ? v : null;
-  }
-
-  // Returns true while analysis for this track is in progress.
-  isAnalyzing(index) {
-    return this._analysisCache[index] === 'pending';
   }
 }
 

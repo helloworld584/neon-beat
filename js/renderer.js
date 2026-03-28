@@ -164,20 +164,29 @@ export class Renderer {
   }
 
   drawNotes(rc) {
-    const noteCyan = getImage('note_cyan');
+    const noteCyan    = getImage('note_cyan');
     const noteMagenta = getImage('note_magenta');
-    
+    const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx];
+
+    // First pass: hold bodies (drawn behind note caps)
+    for (const note of gameState.notes) {
+      if (note.type !== 'hold') continue;
+      if (note.state === 'active' || note.state === 'holding') {
+        this._drawHoldBody(rc, note, spd);
+      }
+    }
+
+    // Second pass: note caps (tap + hold head)
     for (const note of gameState.notes) {
       if (note.state !== 'active') continue;
       if (note.y < GAME.SPAWN_Y - 10 || note.y > GAME.HIT_Y + 60) continue;
-      
+
       const x = note.lane * GAME.LANE_W + (GAME.LANE_W - GAME.NOTE_W) / 2;
       const y = note.y - GAME.NOTE_H / 2;
       const isCyan = note.lane % 2 === 0;
-      
-      rc.save();
       const noteImg = isCyan ? noteCyan : noteMagenta;
-      
+
+      rc.save();
       if (noteImg) {
         rc.drawImage(noteImg, x, y, GAME.NOTE_W, GAME.NOTE_H);
       } else {
@@ -186,9 +195,72 @@ export class Renderer {
         rc.shadowColor = VISUAL.LANE_COL[note.lane];
         rc.fillRect(x, y, GAME.NOTE_W, GAME.NOTE_H);
       }
-      
       rc.restore();
     }
+  }
+
+  // ── Hold note body renderer ──────────────────────────────────────
+  _drawHoldBody(rc, note, spd) {
+    const isCyan  = note.lane % 2 === 0;
+    const col     = VISUAL.LANE_COL[note.lane];
+    const laneX   = note.lane * GAME.LANE_W;
+    const capX    = laneX + (GAME.LANE_W - GAME.NOTE_W) / 2;
+    const bodyW   = GAME.NOTE_W - 20;
+    const bodyX   = laneX + (GAME.LANE_W - bodyW) / 2;
+    const fillRgb = isCyan ? '0,255,255' : '255,0,255';
+
+    rc.save();
+
+    if (note.state === 'active') {
+      const durationPx = note.duration * spd;
+      const headY      = note.y;
+      const tailY      = note.y - durationPx;
+
+      // Body rect (clamped to screen)
+      const drawTop = Math.max(0, tailY);
+      const drawBot = Math.min(GAME.H, headY);
+      if (drawBot > drawTop) {
+        rc.fillStyle = `rgba(${fillRgb},0.18)`;
+        rc.fillRect(bodyX, drawTop, bodyW, drawBot - drawTop);
+        rc.strokeStyle = `rgba(${fillRgb},0.45)`;
+        rc.lineWidth = 1.5;
+        rc.strokeRect(bodyX, drawTop, bodyW, drawBot - drawTop);
+      }
+
+      // Tail cap (bright bar at the end of the hold)
+      if (tailY >= -8 && tailY <= GAME.H) {
+        rc.globalAlpha = 0.80;
+        rc.fillStyle = col;
+        rc.shadowBlur = 10;
+        rc.shadowColor = col;
+        rc.beginPath();
+        rc.roundRect(capX, tailY - 4, GAME.NOTE_W, 8, 2);
+        rc.fill();
+      }
+
+    } else if (note.state === 'holding') {
+      const remaining   = Math.max(0, note.duration - note.holdTime);
+      const remainingPx = remaining * spd;
+
+      if (remainingPx > 4) {
+        const topY = GAME.HIT_Y - remainingPx;
+
+        // Shrinking body above hit line
+        rc.fillStyle = `rgba(${fillRgb},0.28)`;
+        rc.fillRect(bodyX, topY, bodyW, remainingPx);
+
+        // Moving tail cap
+        rc.globalAlpha = 0.90;
+        rc.fillStyle = col;
+        rc.shadowBlur = 12;
+        rc.shadowColor = col;
+        rc.beginPath();
+        rc.roundRect(capX, topY - 4, GAME.NOTE_W, 8, 2);
+        rc.fill();
+      }
+    }
+
+    rc.restore();
   }
 
   // Build a black-background-removed version of hit_fx once, on first use.
@@ -777,41 +849,15 @@ export class Renderer {
       rc.fillText(track.vibe, vx + vibeW / 2, vy + vh / 2);
       rc.restore();
 
-      // Preview hint / BPM status (selected card only)
+      // Preview hint (selected card only)
       if (sel) {
-        const analysis  = musicPlayer.getAnalysis(i);
-        const analyzing = musicPlayer.isAnalyzing(i);
-
-        if (analysis) {
-          // Show detected BPM
-          rc.save();
-          rc.font = 'bold 9px Orbitron,monospace';
-          rc.textAlign = 'right';
-          rc.textBaseline = 'middle';
-          rc.fillStyle = '#00ffff';
-          rc.shadowBlur = 4;
-          rc.shadowColor = '#00ffff';
-          rc.fillText(`\u266a ${analysis.bpm} BPM`, cardX + cardW - 10, lineB);
-          rc.restore();
-        } else if (analyzing) {
-          // Show analysis progress indicator
-          rc.save();
-          rc.font = '400 9px Orbitron,monospace';
-          rc.textAlign = 'right';
-          rc.textBaseline = 'middle';
-          rc.fillStyle = 'rgba(255,220,0,0.75)';
-          rc.fillText('ANALYZING\u2026', cardX + cardW - 10, lineB);
-          rc.restore();
-        } else {
-          // Default: show preview hint
-          rc.save();
-          rc.font = '400 9px Orbitron,monospace';
-          rc.textAlign = 'right';
-          rc.textBaseline = 'middle';
-          rc.fillStyle = 'rgba(255,255,255,0.32)';
-          rc.fillText('\u25b6 SPACE', cardX + cardW - 10, lineB);
-          rc.restore();
-        }
+        rc.save();
+        rc.font = '400 9px Orbitron,monospace';
+        rc.textAlign = 'right';
+        rc.textBaseline = 'middle';
+        rc.fillStyle = 'rgba(255,255,255,0.32)';
+        rc.fillText('\u25b6 SPACE', cardX + cardW - 10, lineB);
+        rc.restore();
       }
     }
 

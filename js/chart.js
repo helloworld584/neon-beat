@@ -4,7 +4,9 @@
 
 import { GAME } from './constants.js';
 
-// Bar patterns: [beatOffset, lane]  (beats 0–3.5 within a bar)
+// Bar patterns: [beatOffset, lane, holdBeats?]
+// holdBeats present → hold note with that many beats duration
+// holdBeats absent  → tap note
 export const PATTERNS = {
   INTRO1:   [[0,0],[2,2]],
   INTRO2:   [[0,1],[2,3]],
@@ -23,11 +25,14 @@ export const PATTERNS = {
   DENSE:    [[0,0],[0.5,2],[1,1],[1.5,3],[2,0],[2.5,2],[3,1],[3.5,3]],
   BREAK1:   [[0,0],[3,3]],
   BREAK2:   [[1,1],[2,2]],
+  // Hold-note break patterns (2-beat holds per note)
+  HBREAK1:  [[0,0,2],[3,3,2]],
+  HBREAK2:  [[1,1,2],[2,2,2]],
 };
 
 export const SONG = [
   // Intro (bars 1-4)
-  'INTRO1','INTRO2','BREAK1','BREAK2',
+  'INTRO1','INTRO2','HBREAK1','HBREAK2',
   // Build (bars 5-8)
   'SIMPLE','SIMPLE','SIMREV','SIMPLE',
   // Verse A (bars 9-16)
@@ -37,7 +42,7 @@ export const SONG = [
   'CROSS','DBL_A','CASC_U','QUAD',
   'DBL_A','CASC_D','CROSS','DENSE',
   // Breakdown (bars 25-28)
-  'INTRO1','INTRO2','BREAK1','BREAK2',
+  'INTRO1','INTRO2','HBREAK1','HBREAK2',
   // Build 2 (bars 29-32)
   'SIMPLE','SIMREV','CASC_U','CROSS',
   // Final drop (bars 33-40)
@@ -48,17 +53,28 @@ export const SONG = [
 export function makeChart() {
   const LEAD = 4; // beat lead-in
   const notes = [];
-  
+
   SONG.forEach((name, barIndex) => {
-    PATTERNS[name].forEach(([beat, lane]) => {
-      notes.push({
-        time: (LEAD + barIndex * 4 + beat) * GAME.BEAT_MS,
-        lane,
-        y: GAME.SPAWN_Y,
-        state: 'pending', // pending|active|hit|missed
-      });
+    PATTERNS[name].forEach(([beat, lane, holdBeats]) => {
+      const time = (LEAD + barIndex * 4 + beat) * GAME.BEAT_MS;
+      if (holdBeats) {
+        notes.push({
+          time, lane,
+          type: 'hold',
+          duration: holdBeats * GAME.BEAT_MS,
+          y: GAME.SPAWN_Y,
+          state: 'pending',
+        });
+      } else {
+        notes.push({
+          time, lane,
+          type: 'tap',
+          y: GAME.SPAWN_Y,
+          state: 'pending',
+        });
+      }
     });
   });
-  
+
   return notes.sort((a, b) => a.time - b.time);
 }

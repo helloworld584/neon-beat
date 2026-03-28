@@ -5,7 +5,7 @@
 import { GAME, INPUT, GAME_STATES, TRACKS, SPEED_MULTIPLIERS } from './constants.js';
 import { gameState } from './state.js';
 import { musicPlayer } from './music.js';
-import { makeChartFromBeats } from './beatdetect.js';
+import { releaseLane } from './game.js';
 
 export class InputHandler {
   constructor(canvas, onHitLane) {
@@ -91,22 +91,16 @@ export class InputHandler {
     switch (key) {
       case 'ArrowUp':
       case 'w':
-      case 'W': {
-        const newCursor = (gameState.musicSelectCursor - 1 + count) % count;
-        gameState.musicSelectCursor = newCursor;
+      case 'W':
+        gameState.musicSelectCursor = (gameState.musicSelectCursor - 1 + count) % count;
         musicPlayer.stopPreview();
-        musicPlayer.startAnalysis(newCursor);
         break;
-      }
       case 'ArrowDown':
       case 's':
-      case 'S': {
-        const newCursor = (gameState.musicSelectCursor + 1) % count;
-        gameState.musicSelectCursor = newCursor;
+      case 'S':
+        gameState.musicSelectCursor = (gameState.musicSelectCursor + 1) % count;
         musicPlayer.stopPreview();
-        musicPlayer.startAnalysis(newCursor);
         break;
-      }
       case 'ArrowLeft':
         gameState.speedMultiplierIdx =
           (gameState.speedMultiplierIdx - 1 + SPEED_MULTIPLIERS.length) % SPEED_MULTIPLIERS.length;
@@ -124,12 +118,8 @@ export class InputHandler {
       case 'Enter': {
         const cursor = gameState.musicSelectCursor;
         gameState.selectedTrack = cursor;
-        const analysis = musicPlayer.getAnalysis(cursor);
-        const chart = analysis
-          ? makeChartFromBeats(analysis.beats, analysis.beatMs)
-          : null;
         musicPlayer.stop();
-        gameState.startGame(chart);
+        gameState.startGame(null);
         musicPlayer.play(cursor);
         break;
       }
@@ -148,6 +138,7 @@ export class InputHandler {
   handleKeyUp(e) {
     const lane = INPUT.KEY_MAP[e.key.toLowerCase()];
     if (lane !== undefined) {
+      if (gameState.gameState === GAME_STATES.PLAYING) releaseLane(lane);
       gameState.keyDown[lane] = false;
     }
   }
@@ -193,9 +184,7 @@ export class InputHandler {
     if (gameState.escConfirm) return;
 
     if (gameState.gameState === GAME_STATES.TITLE) {
-      // Start BGM and kick off analysis for the default track on first interaction
       musicPlayer.playBgm();
-      musicPlayer.startAnalysis(gameState.musicSelectCursor);
       gameState.gameState = GAME_STATES.MUSIC_SELECT;
       return;
     }
