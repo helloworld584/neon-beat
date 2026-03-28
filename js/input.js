@@ -2,7 +2,7 @@
 // NEON BEAT – Input Handler
 // ================================================================
 
-import { GAME, INPUT, GAME_STATES, TRACKS } from './constants.js';
+import { GAME, INPUT, GAME_STATES, TRACKS, SPEED_MULTIPLIERS } from './constants.js';
 import { gameState } from './state.js';
 import { musicPlayer } from './music.js';
 
@@ -23,9 +23,22 @@ export class InputHandler {
   handleKeyDown(e) {
     if (e.repeat) return;
 
-    // Music select screen navigation
+    // ESC confirmation dialog intercepts all input
+    if (gameState.escConfirm) {
+      this.handleEscConfirmKey(e.key);
+      return;
+    }
+
+    // Music select navigation
     if (gameState.gameState === GAME_STATES.MUSIC_SELECT) {
       this.handleMusicSelectKey(e.key);
+      return;
+    }
+
+    // ESC during gameplay → show confirm dialog, pause audio
+    if (gameState.gameState === GAME_STATES.PLAYING && e.key === 'Escape') {
+      gameState.escConfirm = true;
+      musicPlayer.pause();
       return;
     }
 
@@ -47,6 +60,17 @@ export class InputHandler {
     }
   }
 
+  handleEscConfirmKey(key) {
+    if (key === 'y' || key === 'Y' || key === 'Enter') {
+      gameState.escConfirm = false;
+      musicPlayer.stop();
+      gameState.gameState = GAME_STATES.TITLE;
+    } else if (key === 'n' || key === 'N' || key === 'Escape') {
+      gameState.escConfirm = false;
+      musicPlayer.resume();
+    }
+  }
+
   handleMusicSelectKey(key) {
     const count = TRACKS.length;
     switch (key) {
@@ -61,6 +85,14 @@ export class InputHandler {
       case 'S':
         gameState.musicSelectCursor = (gameState.musicSelectCursor + 1) % count;
         musicPlayer.stopPreview();
+        break;
+      case 'ArrowLeft':
+        gameState.speedMultiplierIdx =
+          (gameState.speedMultiplierIdx - 1 + SPEED_MULTIPLIERS.length) % SPEED_MULTIPLIERS.length;
+        break;
+      case 'ArrowRight':
+        gameState.speedMultiplierIdx =
+          (gameState.speedMultiplierIdx + 1) % SPEED_MULTIPLIERS.length;
         break;
       case 'Enter':
         gameState.selectedTrack = gameState.musicSelectCursor;
@@ -125,6 +157,8 @@ export class InputHandler {
   }
 
   onPress(lane) {
+    if (gameState.escConfirm) return;
+
     if (gameState.gameState === GAME_STATES.TITLE) {
       gameState.gameState = GAME_STATES.MUSIC_SELECT;
       return;

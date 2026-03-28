@@ -14,13 +14,24 @@ class MusicPlayer {
 
   init() {
     this.audio = document.getElementById('bgm');
+    if (!this.audio) {
+      console.error('[MusicPlayer] <audio id="bgm"> not found in DOM');
+      return;
+    }
+    this.audio.volume = 0.75;
+    this.audio.onerror = (e) => {
+      console.warn('[MusicPlayer] audio error:', this.audio.src, e.type,
+        this.audio.error ? `code=${this.audio.error.code}` : '');
+    };
+    console.log('[MusicPlayer] initialized, audio element found');
   }
 
   _load(index, loop) {
     if (!this.audio) return;
     const track = TRACKS[index];
-    // Try local asset; the <source> fallback in HTML handles missing files gracefully
-    this.audio.src = `assets/music/${track.file}`;
+    const src = `assets/music/${track.file}`;
+    console.log(`[MusicPlayer] _load(${index}) "${track.title}" → src="${src}" loop=${loop}`);
+    this.audio.src = src;
     this.audio.loop = loop;
     this.audio.currentTime = 0;
   }
@@ -29,16 +40,23 @@ class MusicPlayer {
     this.stopPreview();
     this._load(index, true);
     this._pendingPlay = false;
-    this.audio.play().catch(() => {
-      // Autoplay blocked — will retry on next user gesture via resumeIfPending()
-      this._pendingPlay = true;
-    });
+    console.log('[MusicPlayer] calling audio.play()…');
+    const p = this.audio.play();
+    if (p !== undefined) {
+      p.then(() => {
+        console.log('[MusicPlayer] audio.play() resolved — music playing');
+      }).catch((err) => {
+        console.warn('[MusicPlayer] audio.play() blocked:', err.name, err.message);
+        this._pendingPlay = true;
+      });
+    }
   }
 
-  // Call on any user gesture during gameplay to unblock autoplay-gated audio
+  // Retry play on the next user gesture (called from onPress in input.js)
   resumeIfPending() {
     if (this._pendingPlay && this.audio && this.audio.paused) {
       this._pendingPlay = false;
+      console.log('[MusicPlayer] resuming blocked audio on user gesture');
       this.audio.play().catch(() => {});
     }
   }
@@ -65,8 +83,21 @@ class MusicPlayer {
     }
   }
 
+  pause() {
+    if (this.audio && !this.audio.paused) {
+      this.audio.pause();
+    }
+  }
+
+  resume() {
+    if (this.audio && this.audio.paused && this.audio.src) {
+      this.audio.play().catch(() => {});
+    }
+  }
+
   stop() {
     this.stopPreview();
+    this._pendingPlay = false;
     if (this.audio) {
       this.audio.pause();
       this.audio.currentTime = 0;

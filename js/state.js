@@ -33,6 +33,10 @@ class GameState {
     this.selectedTrack = 0;
     this.isMuted = false;
     this.trackNameT = 0;
+    // Speed multiplier index (persists across games)
+    this.speedMultiplierIdx = 1;   // default 1.0x
+    // ESC-to-menu confirmation
+    this.escConfirm = false;
   }
 
   startGame() {
@@ -49,6 +53,7 @@ class GameState {
     this.startTime = performance.now();
     this.songTime = 0;
     this.trackNameT = 2000;
+    this.escConfirm = false;
     this.gameState = GAME_STATES.PLAYING;
   }
 

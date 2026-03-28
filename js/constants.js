@@ -47,6 +47,8 @@ export const TRACKS = [
   { title: 'The Sun_Long',              artist: 'Grand_Project',     vibe: 'CINEMATIC',   file: 'the-sun-long.mp3' },
 ];
 
+export const SPEED_MULTIPLIERS = [0.75, 1.0, 1.25, 1.5];
+
 export const VIBE_COLORS = {
   AGGRESSIVE:  '#ff4422',
   ADVENTURE:   '#44ff88',

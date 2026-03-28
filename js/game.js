@@ -2,7 +2,7 @@
 // NEON BEAT – Game Logic
 // ================================================================
 
-import { GAME, GAME_STATES } from './constants.js';
+import { GAME, GAME_STATES, SPEED_MULTIPLIERS } from './constants.js';
 import { gameState } from './state.js';
 
 export function hitLane(lane) {
@@ -68,10 +68,11 @@ export function update(dt) {
     
     if (timeToHit <= GAME.LEAD_MS) {
       note.state = 'active';
-      note.y = GAME.HIT_Y - timeToHit * GAME.SPD;
+      const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx];
+      note.y = GAME.HIT_Y - timeToHit * spd;
     }
     
-    if (note.state === 'active' && note.y > GAME.HIT_Y + GAME.GOOD_WIN * GAME.SPD + 8) {
+    if (note.state === 'active' && note.y > GAME.HIT_Y + GAME.GOOD_WIN * GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] + 8) {
       note.state = 'missed';
       gameState.combo = 0;
       gameState.judgeText = 'MISS';
