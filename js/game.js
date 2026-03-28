@@ -11,14 +11,35 @@ function applyScore(lane, grade) {
   gameState.combo++;
   if (gameState.combo > gameState.maxCombo) gameState.maxCombo = gameState.combo;
 
-  const multiplier = 1 + Math.floor(gameState.combo / 10) * 0.5;
-  gameState.score += Math.floor((grade === 'PERFECT' ? 300 : 100) * multiplier);
+  if (grade !== 'PERFECT') gameState.allPerfect = false;
+
+  let comboMult = 1 + Math.floor(gameState.combo / 10) * 0.5;
+  let modMult   = 1;
+
+  if (gameState.hasModifier('overclock'))   modMult *= 2;
+  if (gameState.hasModifier('mirror'))      modMult *= 1.5;
+  if (gameState.hasModifier('score_virus')) modMult *= 1;  // virus handled at clear
+
+  let baseScore = grade === 'PERFECT' ? 300 : 100;
+  let pts = Math.floor(baseScore * comboMult * modMult);
+
+  // auto_heal: bonus ×1.5 every 10 consecutive PERFECTs
+  if (gameState.hasModifier('auto_heal') && grade === 'PERFECT' && gameState.combo % 10 === 0) {
+    pts = Math.floor(pts * 1.5);
+    gameState.glitchT = 300;
+    gameState.glitchStr = 0.4;
+  }
+
+  gameState.score += pts;
+
+  // Earn credits
+  gameState.credits += grade === 'PERFECT' ? 2 : 1;
 
   gameState.judgeText = grade;
   gameState.judgeT = 550;
 
   gameState.effects.push({
-    x: lane * GAME.LANE_W + GAME.LANE_W / 2,
+    x: lane * gameState.laneW + gameState.laneW / 2,
     y: GAME.HIT_Y,
     t: 380,
     max: 380,
@@ -35,7 +56,8 @@ function applyScore(lane, grade) {
 
 // ── Called when a lane key is pressed ────────────────────────────
 export function hitLane(lane) {
-  const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx];
+  const overclock = gameState.hasModifier('overclock') ? 1.2 : 1.0;
+  const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * overclock;
   let bestNote = null;
   let bestDistance = Infinity;
 
@@ -70,7 +92,8 @@ export function hitLane(lane) {
     bestNote.state = 'holding';
     bestNote.holdTime = 0;
   } else {
-    const grade = ms <= GAME.PERF_WIN ? 'PERFECT' : 'GOOD';
+    const perfWin2 = GAME.PERF_WIN + (gameState.hasModifier('ghost_notes') ? 50 : 0);
+    const grade = ms <= perfWin2 ? 'PERFECT' : 'GOOD';
     bestNote.state = 'hit';
     applyScore(bestNote.lane, grade);
   }
@@ -93,7 +116,9 @@ export function releaseLane(lane) {
 export function update(dt) {
   gameState.updateSongTime();
 
-  const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx];
+  // overclock: speed +20%
+  const overclock = gameState.hasModifier('overclock') ? 1.2 : 1.0;
+  const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * overclock;
   const missThreshold = GAME.HIT_Y + GAME.GOOD_WIN * spd + 8;
 
   for (const note of gameState.notes) {
@@ -119,20 +144,22 @@ export function update(dt) {
 
     // ── Miss check ────────────────────────────────────────────────
     if (note.state === 'active' && note.y > missThreshold) {
-      if (note.type === 'hold') {
-        // Hold notes: only miss when the tail also passes
-        const tailY = note.y - note.duration * spd;
-        if (tailY > missThreshold) {
-          note.state = 'missed';
-          gameState.combo = 0;
-          gameState.judgeText = 'MISS';
-          gameState.judgeT = 420;
-        }
-      } else {
+      const doMiss = () => {
         note.state = 'missed';
         gameState.combo = 0;
+        gameState.allPerfect = false;
         gameState.judgeText = 'MISS';
         gameState.judgeT = 420;
+        // score_virus: miss deducts 100 pts
+        if (gameState.hasModifier('score_virus')) {
+          gameState.score = Math.max(0, gameState.score - 100);
+        }
+      };
+      if (note.type === 'hold') {
+        const tailY = note.y - note.duration * spd;
+        if (tailY > missThreshold) doMiss();
+      } else {
+        doMiss();
       }
     }
   }
@@ -142,6 +169,12 @@ export function update(dt) {
   if (lastNote) {
     const tailEnd = lastNote.time + (lastNote.duration || 0);
     if (gameState.songTime > tailEnd + 3500) {
+      // Clear bonuses
+      gameState.credits += 50;                         // song clear bonus
+      if (gameState.allPerfect) gameState.credits += 200; // full perfect bonus
+      // score_virus: cleared alive → ×3 reward
+      if (gameState.hasModifier('score_virus')) gameState.score = Math.floor(gameState.score * 3);
+      gameState.saveCredits();
       gameState.gameState = GAME_STATES.GAMEOVER;
     }
   }

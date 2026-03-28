@@ -21,18 +21,22 @@ export const GAME = {
 };
 
 export const INPUT = {
-  KEY_MAP: { d: 0, f: 1, j: 2, k: 3 },
-  KEY_LABELS: ['D', 'F', 'J', 'K'],
+  KEY_MAP_4: { d: 0, f: 1, j: 2, k: 3 },
+  KEY_MAP_6: { d: 0, f: 1, g: 2, h: 3, j: 4, k: 5 },
+  KEY_LABELS_4: ['D', 'F', 'J', 'K'],
+  KEY_LABELS_6: ['D', 'F', 'G', 'H', 'J', 'K'],
 };
 
 export const VISUAL = {
-  LANE_COL: ['#00ffff', '#ff00ff', '#00ffff', '#ff00ff'],
+  // 6 entries so double_lane (6-lane) works without change
+  LANE_COL: ['#00ffff', '#ff00ff', '#00ffff', '#ff00ff', '#00ffff', '#ff00ff'],
 };
 
 export const GAME_STATES = {
   LOADING: 'LOADING',
   TITLE: 'TITLE',
   MUSIC_SELECT: 'MUSIC_SELECT',
+  SHOP: 'SHOP',
   PLAYING: 'PLAYING',
   GAMEOVER: 'GAMEOVER',
 };
@@ -48,6 +52,15 @@ export const TRACKS = [
 ];
 
 export const SPEED_MULTIPLIERS = [0.75, 1.0, 1.25, 1.5];
+
+export const SHOP_ITEMS = [
+  { id: 'overclock',   name: 'OVERCLOCK',    desc: 'Speed +20%  /  Score ×2',           cost: 300 },
+  { id: 'ghost_notes', name: 'GHOST NOTES',  desc: 'Notes fade  /  Perfect +50ms',       cost: 200 },
+  { id: 'double_lane', name: 'DOUBLE LANE',  desc: 'Expand to 6 lanes',                  cost: 500 },
+  { id: 'auto_heal',   name: 'AUTO-HEAL',    desc: 'Perfect ×10  →  score ×1.5 bonus',   cost: 150 },
+  { id: 'score_virus', name: 'SCORE VIRUS',  desc: 'Miss  −100  /  Clear  ×3',           cost: 0   },
+  { id: 'mirror',      name: 'MIRROR',       desc: 'Lanes reversed  /  Score ×1.5',      cost: 100 },
+];
 
 export const VIBE_COLORS = {
   AGGRESSIVE:  '#ff4422',

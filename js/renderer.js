@@ -2,7 +2,7 @@
 // NEON BEAT – Rendering System
 // ================================================================
 
-import { GAME, INPUT, VISUAL, GAME_STATES, TRACKS, VIBE_COLORS, SPEED_MULTIPLIERS } from './constants.js';
+import { GAME, INPUT, VISUAL, GAME_STATES, TRACKS, VIBE_COLORS, SPEED_MULTIPLIERS, SHOP_ITEMS } from './constants.js';
 import { getImage } from './assets.js';
 import { gameState } from './state.js';
 import { musicPlayer } from './music.js';
@@ -23,6 +23,9 @@ export class Renderer {
       this.drawScanlines(this.offCtx);
     } else if (gameState.gameState === GAME_STATES.MUSIC_SELECT) {
       this.renderMusicSelect(this.offCtx);
+      this.drawScanlines(this.offCtx);
+    } else if (gameState.gameState === GAME_STATES.SHOP) {
+      this.renderShop(this.offCtx);
       this.drawScanlines(this.offCtx);
     } else {
       this.drawScrollBG(this.offCtx);
@@ -99,27 +102,29 @@ export class Renderer {
   }
 
   drawLanes(rc) {
+    const lc = gameState.laneCount;
+    const lw = gameState.laneW;
     rc.save();
-    
+
     // Dividers
-    for (let i = 1; i < GAME.LANES; i++) {
+    for (let i = 1; i < lc; i++) {
       rc.strokeStyle = 'rgba(255,255,255,0.06)';
       rc.lineWidth = 1;
       rc.beginPath();
-      rc.moveTo(i * GAME.LANE_W, 0);
-      rc.lineTo(i * GAME.LANE_W, GAME.H);
+      rc.moveTo(i * lw, 0);
+      rc.lineTo(i * lw, GAME.H);
       rc.stroke();
     }
-    
+
     // Key-press lane glow
-    for (let i = 0; i < GAME.LANES; i++) {
-      const alpha = (gameState.keyDown[i] ? 0.13 : 0) + (gameState.keyFlash[i] / 200) * 0.14;
+    for (let i = 0; i < lc; i++) {
+      const alpha = (gameState.keyDown[i] ? 0.13 : 0) + ((gameState.keyFlash[i] || 0) / 200) * 0.14;
       if (alpha > 0.01) {
         rc.fillStyle = `rgba(${i % 2 === 0 ? '0,255,255' : '255,0,255'},${alpha.toFixed(3)})`;
-        rc.fillRect(i * GAME.LANE_W, 0, GAME.LANE_W, GAME.H);
+        rc.fillRect(i * lw, 0, lw, GAME.H);
       }
     }
-    
+
     rc.restore();
   }
 
@@ -137,24 +142,26 @@ export class Renderer {
     rc.stroke();
 
     // Per-lane circles
-    for (let i = 0; i < GAME.LANES; i++) {
-      const cx = i * GAME.LANE_W + GAME.LANE_W / 2;
+    const lc = gameState.laneCount;
+    const lw = gameState.laneW;
+    for (let i = 0; i < lc; i++) {
+      const cx = i * lw + lw / 2;
       const col = VISUAL.LANE_COL[i];
-      const pressed = gameState.keyDown[i] || gameState.keyFlash[i] > 0;
-      
+      const pressed = gameState.keyDown[i] || (gameState.keyFlash[i] || 0) > 0;
+
       rc.shadowBlur = pressed ? 24 : 8;
       rc.shadowColor = col;
       rc.strokeStyle = col;
       rc.lineWidth = pressed ? 3 : 1.5;
       rc.beginPath();
-      rc.arc(cx, GAME.HIT_Y, GAME.LANE_W / 2 - 12, 0, Math.PI * 2);
+      rc.arc(cx, GAME.HIT_Y, lw / 2 - 12, 0, Math.PI * 2);
       rc.stroke();
-      
+
       if (pressed) {
         rc.globalAlpha = 0.22;
         rc.fillStyle = col;
         rc.beginPath();
-        rc.arc(cx, GAME.HIT_Y, GAME.LANE_W / 2 - 12, 0, Math.PI * 2);
+        rc.arc(cx, GAME.HIT_Y, lw / 2 - 12, 0, Math.PI * 2);
         rc.fill();
         rc.globalAlpha = 1;
       }
@@ -166,7 +173,11 @@ export class Renderer {
   drawNotes(rc) {
     const noteCyan    = getImage('note_cyan');
     const noteMagenta = getImage('note_magenta');
-    const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx];
+    const overclock   = gameState.hasModifier('overclock') ? 1.2 : 1.0;
+    const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * overclock;
+    const ghostNotes  = gameState.hasModifier('ghost_notes');
+    const lw = gameState.laneW;
+    const nw = gameState.noteW;
 
     // First pass: hold bodies (drawn behind note caps)
     for (const note of gameState.notes) {
@@ -181,19 +192,27 @@ export class Renderer {
       if (note.state !== 'active') continue;
       if (note.y < GAME.SPAWN_Y - 10 || note.y > GAME.HIT_Y + 60) continue;
 
-      const x = note.lane * GAME.LANE_W + (GAME.LANE_W - GAME.NOTE_W) / 2;
+      const x = note.lane * lw + (lw - nw) / 2;
       const y = note.y - GAME.NOTE_H / 2;
-      const isCyan = note.lane % 2 === 0;
+      const isCyan  = note.lane % 2 === 0;
       const noteImg = isCyan ? noteCyan : noteMagenta;
 
+      // ghost_notes: fade out as the note approaches the hit zone
+      let alpha = 1;
+      if (ghostNotes) {
+        const dist = Math.max(0, GAME.HIT_Y - note.y);
+        alpha = Math.min(1, dist / (GAME.HIT_Y * 0.5));
+      }
+
       rc.save();
+      rc.globalAlpha = alpha;
       if (noteImg) {
-        rc.drawImage(noteImg, x, y, GAME.NOTE_W, GAME.NOTE_H);
+        rc.drawImage(noteImg, x, y, nw, GAME.NOTE_H);
       } else {
         rc.fillStyle = VISUAL.LANE_COL[note.lane];
         rc.shadowBlur = 10;
         rc.shadowColor = VISUAL.LANE_COL[note.lane];
-        rc.fillRect(x, y, GAME.NOTE_W, GAME.NOTE_H);
+        rc.fillRect(x, y, nw, GAME.NOTE_H);
       }
       rc.restore();
     }
@@ -201,12 +220,14 @@ export class Renderer {
 
   // ── Hold note body renderer ──────────────────────────────────────
   _drawHoldBody(rc, note, spd) {
-    const isCyan  = note.lane % 2 === 0;
+    const lw      = gameState.laneW;
+    const nw      = gameState.noteW;
     const col     = VISUAL.LANE_COL[note.lane];
-    const laneX   = note.lane * GAME.LANE_W;
-    const capX    = laneX + (GAME.LANE_W - GAME.NOTE_W) / 2;
-    const bodyW   = GAME.NOTE_W - 20;
-    const bodyX   = laneX + (GAME.LANE_W - bodyW) / 2;
+    const laneX   = note.lane * lw;
+    const capX    = laneX + (lw - nw) / 2;
+    const isCyan  = note.lane % 2 === 0;
+    const bodyW   = nw - 20;
+    const bodyX   = laneX + (lw - bodyW) / 2;
     const fillRgb = isCyan ? '0,255,255' : '255,0,255';
 
     rc.save();
@@ -234,7 +255,7 @@ export class Renderer {
         rc.shadowBlur = 10;
         rc.shadowColor = col;
         rc.beginPath();
-        rc.roundRect(capX, tailY - 4, GAME.NOTE_W, 8, 2);
+        rc.roundRect(capX, tailY - 4, nw, 8, 2);
         rc.fill();
       }
 
@@ -255,7 +276,7 @@ export class Renderer {
         rc.shadowBlur = 12;
         rc.shadowColor = col;
         rc.beginPath();
-        rc.roundRect(capX, topY - 4, GAME.NOTE_W, 8, 2);
+        rc.roundRect(capX, topY - 4, nw, 8, 2);
         rc.fill();
       }
     }
@@ -318,14 +339,17 @@ export class Renderer {
   }
 
   drawKeyButtons(rc) {
+    const lc      = gameState.laneCount;
+    const lw      = gameState.laneW;
+    const labels  = lc === 6 ? INPUT.KEY_LABELS_6 : INPUT.KEY_LABELS_4;
     const buttonY = GAME.HIT_Y + 58;
-    const size = 40;
-    
-    for (let i = 0; i < GAME.LANES; i++) {
-      const cx = i * GAME.LANE_W + GAME.LANE_W / 2;
+    const size    = Math.min(40, lw - 10);
+
+    for (let i = 0; i < lc; i++) {
+      const cx = i * lw + lw / 2;
       const col = VISUAL.LANE_COL[i];
       const pressed = gameState.keyDown[i];
-      
+
       rc.save();
       rc.shadowBlur = pressed ? 20 : 6;
       rc.shadowColor = col;
@@ -336,13 +360,13 @@ export class Renderer {
       rc.roundRect(cx - size / 2, buttonY - size / 2, size, size, 7);
       rc.fill();
       rc.stroke();
-      
-      rc.font = 'bold 14px Orbitron,monospace';
+
+      rc.font = `bold ${lc === 6 ? 11 : 14}px Orbitron,monospace`;
       rc.textAlign = 'center';
       rc.textBaseline = 'middle';
       rc.fillStyle = pressed ? '#000' : col;
       rc.shadowBlur = 0;
-      rc.fillText(INPUT.KEY_LABELS[i], cx, buttonY);
+      rc.fillText(labels[i], cx, buttonY);
       rc.restore();
     }
   }
@@ -979,6 +1003,245 @@ export class Renderer {
     rc.restore();
   }
 
+  // ── Shop screen ───────────────────────────────────────────────────
+  renderShop(rc) {
+    // Background
+    rc.fillStyle = '#02000d';
+    rc.fillRect(0, 0, GAME.W, GAME.H);
+
+    // Grid lines
+    rc.save();
+    rc.strokeStyle = 'rgba(255,0,255,0.07)';
+    rc.lineWidth = 1;
+    for (let x = 0; x < GAME.W; x += 32) { rc.beginPath(); rc.moveTo(x,0); rc.lineTo(x,GAME.H); rc.stroke(); }
+    for (let y = 0; y < GAME.H; y += 32) { rc.beginPath(); rc.moveTo(0,y); rc.lineTo(GAME.W,y); rc.stroke(); }
+    rc.restore();
+
+    // Header
+    rc.save();
+    rc.font = '900 22px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = '#ff00ff';
+    rc.shadowBlur = 20;
+    rc.shadowColor = '#ff00ff';
+    rc.fillText('JACK IN  //  SHOP', GAME.W / 2, 52);
+    rc.restore();
+
+    // Credits display (top-right)
+    rc.save();
+    rc.font = 'bold 14px Orbitron,monospace';
+    rc.textAlign = 'right';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = '#00ffff';
+    rc.shadowBlur = 8;
+    rc.shadowColor = '#00ffff';
+    rc.fillText(`\u25c6 ${gameState.credits} CR`, GAME.W - 16, 52);
+    rc.restore();
+
+    // Active track name
+    const track = TRACKS[gameState.selectedTrack];
+    if (track) {
+      rc.save();
+      rc.font = '400 9px Orbitron,monospace';
+      rc.textAlign = 'center';
+      rc.textBaseline = 'middle';
+      rc.fillStyle = 'rgba(255,255,255,0.30)';
+      rc.fillText(`\u266a  ${track.title.toUpperCase()}`, GAME.W / 2, 76);
+      rc.restore();
+    }
+
+    // Divider
+    rc.save();
+    rc.strokeStyle = 'rgba(255,0,255,0.25)';
+    rc.lineWidth = 1;
+    rc.beginPath();
+    rc.moveTo(20, 88); rc.lineTo(GAME.W - 20, 88);
+    rc.stroke();
+    rc.restore();
+
+    // ── Item cards ───────────────────────────────────────────────────
+    const items   = gameState.shopItems;
+    const nCards  = items.length;
+    const cardW   = 110;
+    const cardH   = 236;
+    const gap     = (GAME.W - nCards * cardW) / (nCards + 1);
+    const cardY   = 104;
+
+    for (let i = 0; i < nCards; i++) {
+      const item  = items[i];
+      const cx    = gap + i * (cardW + gap);
+      const sel   = i === gameState.shopCursor;
+      const owned = item.purchased || gameState.hasModifier(item.id);
+      const canBuy = !owned && gameState.credits >= item.cost;
+
+      // Card bg
+      rc.save();
+      rc.fillStyle = sel
+        ? 'rgba(255,0,255,0.10)'
+        : 'rgba(255,255,255,0.03)';
+      rc.strokeStyle = sel
+        ? '#ff00ff'
+        : owned ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.08)';
+      rc.lineWidth = sel ? 1.5 : 1;
+      rc.shadowBlur = sel ? 12 : 0;
+      rc.shadowColor = '#ff00ff';
+      rc.beginPath();
+      rc.roundRect(cx, cardY, cardW, cardH, 8);
+      rc.fill();
+      rc.stroke();
+      rc.restore();
+
+      // Item name
+      rc.save();
+      rc.font = 'bold 10px Orbitron,monospace';
+      rc.textAlign = 'center';
+      rc.textBaseline = 'top';
+      rc.fillStyle = sel ? '#ff88ff' : 'rgba(255,255,255,0.85)';
+      rc.shadowBlur = sel ? 6 : 0;
+      rc.shadowColor = '#ff00ff';
+      // wrap long names
+      const words = item.name.split(' ');
+      if (words.length > 1 && rc.measureText(item.name).width > cardW - 12) {
+        rc.fillText(words[0], cx + cardW / 2, cardY + 14);
+        rc.fillText(words.slice(1).join(' '), cx + cardW / 2, cardY + 26);
+      } else {
+        rc.fillText(item.name, cx + cardW / 2, cardY + 18);
+      }
+      rc.restore();
+
+      // Description
+      rc.save();
+      rc.font = '400 8px Orbitron,monospace';
+      rc.textAlign = 'center';
+      rc.textBaseline = 'top';
+      rc.fillStyle = 'rgba(255,255,255,0.45)';
+      // Split desc at '/' for two lines
+      const parts = item.desc.split('/');
+      parts.forEach((p, idx) => {
+        rc.fillText(p.trim(), cx + cardW / 2, cardY + 52 + idx * 14);
+      });
+      rc.restore();
+
+      // Cost
+      rc.save();
+      rc.font = 'bold 18px Orbitron,monospace';
+      rc.textAlign = 'center';
+      rc.textBaseline = 'middle';
+      const costColor = owned ? 'rgba(255,255,255,0.2)'
+        : canBuy ? '#ffcc00'
+        : 'rgba(255,100,100,0.7)';
+      rc.fillStyle = costColor;
+      rc.shadowBlur = canBuy && !owned ? 8 : 0;
+      rc.shadowColor = '#ffcc00';
+      rc.fillText(item.cost === 0 ? 'FREE' : `${item.cost}`, cx + cardW / 2, cardY + 118);
+      if (!owned && item.cost > 0) {
+        rc.font = '400 8px Orbitron,monospace';
+        rc.shadowBlur = 0;
+        rc.fillStyle = 'rgba(255,204,0,0.5)';
+        rc.fillText('CR', cx + cardW / 2, cardY + 134);
+      }
+      rc.restore();
+
+      // BUY / OWNED button
+      const btnW = cardW - 20, btnH = 28;
+      const btnX = cx + 10, btnY = cardY + cardH - 44;
+      rc.save();
+      if (owned) {
+        rc.fillStyle = 'rgba(255,255,255,0.06)';
+        rc.strokeStyle = 'rgba(255,255,255,0.15)';
+      } else if (canBuy) {
+        rc.fillStyle = sel ? 'rgba(255,0,255,0.22)' : 'rgba(255,0,255,0.10)';
+        rc.strokeStyle = '#ff00ff';
+        rc.shadowBlur = sel ? 10 : 0;
+        rc.shadowColor = '#ff00ff';
+      } else {
+        rc.fillStyle = 'rgba(255,255,255,0.03)';
+        rc.strokeStyle = 'rgba(255,255,255,0.10)';
+      }
+      rc.lineWidth = 1;
+      rc.beginPath();
+      rc.roundRect(btnX, btnY, btnW, btnH, 5);
+      rc.fill();
+      rc.stroke();
+      rc.shadowBlur = 0;
+      rc.font = 'bold 9px Orbitron,monospace';
+      rc.textAlign = 'center';
+      rc.textBaseline = 'middle';
+      rc.fillStyle = owned
+        ? 'rgba(255,255,255,0.25)'
+        : canBuy ? '#ff88ff' : 'rgba(255,80,80,0.5)';
+      rc.fillText(
+        owned ? '[ OWNED ]' : canBuy ? '[ BUY ]' : '[ N/A ]',
+        btnX + btnW / 2, btnY + btnH / 2
+      );
+      rc.restore();
+    }
+
+    // ── Active modifiers row ─────────────────────────────────────────
+    const mods = gameState.currentRun.modifiers;
+    if (mods.length > 0) {
+      const rowY = cardY + cardH + 16;
+      rc.save();
+      rc.font = '400 8px Orbitron,monospace';
+      rc.textAlign = 'center';
+      rc.textBaseline = 'middle';
+      rc.fillStyle = 'rgba(255,255,255,0.30)';
+      rc.fillText('ACTIVE MODS', GAME.W / 2, rowY);
+      let pillX = 16;
+      const pillY = rowY + 14;
+      for (const id of mods) {
+        const item = SHOP_ITEMS.find(s => s.id === id);
+        const label = item ? item.name : id.toUpperCase();
+        rc.font = 'bold 8px Orbitron,monospace';
+        const pw = rc.measureText(label).width + 12;
+        rc.fillStyle = 'rgba(255,0,255,0.18)';
+        rc.strokeStyle = 'rgba(255,0,255,0.6)';
+        rc.lineWidth = 1;
+        rc.beginPath();
+        rc.roundRect(pillX, pillY, pw, 18, 9);
+        rc.fill();
+        rc.stroke();
+        rc.fillStyle = '#ff88ff';
+        rc.shadowBlur = 0;
+        rc.fillText(label, pillX + pw / 2, pillY + 9);
+        pillX += pw + 6;
+        if (pillX > GAME.W - 20) break;
+      }
+      rc.restore();
+    }
+
+    // ── START button ─────────────────────────────────────────────────
+    const btnW2 = 200, btnH2 = 38;
+    const btnX2 = (GAME.W - btnW2) / 2, btnY2 = 770;
+    rc.save();
+    rc.fillStyle = 'rgba(0,255,255,0.12)';
+    rc.strokeStyle = '#00ffff';
+    rc.lineWidth = 1.5;
+    rc.shadowBlur = 12;
+    rc.shadowColor = '#00ffff';
+    rc.beginPath();
+    rc.roundRect(btnX2, btnY2, btnW2, btnH2, 8);
+    rc.fill();
+    rc.stroke();
+    rc.shadowBlur = 5;
+    rc.font = 'bold 13px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = '#00ffff';
+    rc.fillText('\u25b6  START', GAME.W / 2, btnY2 + btnH2 / 2);
+    rc.restore();
+
+    // Keyboard hints
+    rc.save();
+    rc.font = '400 9px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.22)';
+    rc.fillText('\u2190\u2192 SELECT   \u2022   ENTER BUY   \u2022   S / TAP START', GAME.W / 2, 820);
+    rc.restore();
+  }
+
   renderEscConfirm(rc) {
     rc.save();
 
@@ -1061,24 +1324,24 @@ export class Renderer {
     rc.shadowColor = '#00ffff';
     rc.fillText(`MAX COMBO  ${gameState.maxCombo}×`, GAME.W / 2, GAME.H / 2 + 36);
 
-    // RETRY button
-    const retryX = (GAME.W - 190) / 2, retryY = GAME.H / 2 + 80, retryW = 190, retryH = 40;
+    // → SHOP button (primary CTA)
+    const shopBtnX = (GAME.W - 200) / 2, shopBtnY = GAME.H / 2 + 80, shopBtnW = 200, shopBtnH = 42;
     rc.shadowBlur = 14;
     rc.shadowColor = '#ff00ff';
     rc.fillStyle = 'rgba(255,0,255,0.18)';
     rc.strokeStyle = '#ff00ff';
     rc.lineWidth = 1.5;
     rc.beginPath();
-    rc.roundRect(retryX, retryY, retryW, retryH, 8);
+    rc.roundRect(shopBtnX, shopBtnY, shopBtnW, shopBtnH, 8);
     rc.fill();
     rc.stroke();
     rc.shadowBlur = 6;
     rc.font = 'bold 14px Orbitron,monospace';
     rc.fillStyle = '#ff00ff';
-    rc.fillText('\u21ba  RETRY', GAME.W / 2, retryY + retryH / 2);
+    rc.fillText('\u25b6  JACK IN  //  SHOP', GAME.W / 2, shopBtnY + shopBtnH / 2);
 
     // MENU button
-    const menuX = (GAME.W - 140) / 2, menuY = GAME.H / 2 + 134, menuW = 140, menuH = 32;
+    const menuX = (GAME.W - 140) / 2, menuY = GAME.H / 2 + 136, menuW = 140, menuH = 32;
     rc.shadowBlur = 8;
     rc.shadowColor = '#00ffff';
     rc.fillStyle = 'rgba(0,255,255,0.10)';
@@ -1096,7 +1359,7 @@ export class Renderer {
     // Keyboard hints
     rc.font = '400 9px Orbitron,monospace';
     rc.fillStyle = 'rgba(255,255,255,0.25)';
-    rc.fillText('R / ENTER → RETRY   \u2022   ESC → MENU', GAME.W / 2, GAME.H / 2 + 184);
+    rc.fillText('R / ENTER \u2192 SHOP   \u2022   ESC \u2192 MENU', GAME.W / 2, GAME.H / 2 + 186);
 
     rc.restore();
   }

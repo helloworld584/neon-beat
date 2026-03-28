@@ -57,6 +57,11 @@ export class InputHandler {
       return;
     }
 
+    if (gameState.gameState === GAME_STATES.SHOP) {
+      this._handleShopKey(e.key);
+      return;
+    }
+
     if (gameState.gameState === GAME_STATES.PLAYING && e.key === 'Escape') {
       gameState.escConfirm = true;
       musicPlayer.pause();
@@ -70,15 +75,18 @@ export class InputHandler {
 
     if (gameState.gameState === GAME_STATES.GAMEOVER) {
       if (e.key.toLowerCase() === 'r' || e.key === 'Enter') {
-        this._retryGame();
+        musicPlayer.stop();
+        gameState.enterShop();
       } else if (e.key === 'Escape') {
         musicPlayer.stop();
+        gameState.clearRun();
         gameState.gameState = GAME_STATES.MUSIC_SELECT;
       }
       return;
     }
 
-    const lane = INPUT.KEY_MAP[e.key.toLowerCase()];
+    const keyMap = gameState.laneCount === 6 ? INPUT.KEY_MAP_6 : INPUT.KEY_MAP_4;
+    const lane = keyMap[e.key.toLowerCase()];
     if (lane !== undefined) this._onPress(lane);
 
     if (gameState.gameState === GAME_STATES.PLAYING && e.key.toLowerCase() === 'm') {
@@ -88,7 +96,8 @@ export class InputHandler {
   }
 
   _handleKeyUp(e) {
-    const lane = INPUT.KEY_MAP[e.key.toLowerCase()];
+    const keyMap = gameState.laneCount === 6 ? INPUT.KEY_MAP_6 : INPUT.KEY_MAP_4;
+    const lane = keyMap[e.key.toLowerCase()];
     if (lane !== undefined) {
       if (gameState.gameState === GAME_STATES.PLAYING) releaseLane(lane);
       gameState.keyDown[lane] = false;
@@ -127,7 +136,7 @@ export class InputHandler {
         break;
       case '[': gameState.chartOffset -= 10; break;
       case ']': gameState.chartOffset += 10; break;
-      case 'Enter': this._startGame(); break;
+      case 'Enter': this._enterShopFromSelect(); break;
       case 'Escape':
         musicPlayer.stopPreview();
         gameState.gameState = GAME_STATES.TITLE;
@@ -136,6 +145,41 @@ export class InputHandler {
         musicPlayer.preview(gameState.musicSelectCursor);
         break;
     }
+  }
+
+  _handleShopKey(key) {
+    const items = gameState.shopItems;
+    const n = items.length;
+    switch (key) {
+      case 'ArrowLeft': case 'a': case 'A':
+        gameState.shopCursor = (gameState.shopCursor - 1 + n) % n;
+        break;
+      case 'ArrowRight': case 'd': case 'D':
+        gameState.shopCursor = (gameState.shopCursor + 1) % n;
+        break;
+      case 'Enter': {
+        const item = items[gameState.shopCursor];
+        if (item) this._buyShopItem(item, gameState.shopCursor);
+        break;
+      }
+      case 's': case 'S': case ' ':
+        this._startGame();
+        break;
+      case 'Escape':
+        gameState.clearRun();
+        gameState.gameState = GAME_STATES.MUSIC_SELECT;
+        break;
+    }
+  }
+
+  _buyShopItem(item, idx) {
+    if (item.purchased) return;
+    if (gameState.hasModifier(item.id)) return;
+    if (gameState.credits < item.cost) return;
+    gameState.credits -= item.cost;
+    gameState.currentRun.modifiers.push(item.id);
+    gameState.shopItems[idx].purchased = true;
+    gameState.saveCredits();
   }
 
   // ── Pointer (touch + mouse) ────────────────────────────────────────
@@ -157,10 +201,10 @@ export class InputHandler {
     const rect   = this.canvas.getBoundingClientRect();
     const scaleX = GAME.W / rect.width;
     const lane = this._touchLanes.get(e.pointerId)
-      ?? Math.floor((e.clientX - rect.left) * scaleX / GAME.LANE_W);
+      ?? Math.floor((e.clientX - rect.left) * scaleX / gameState.laneW);
     this._touchLanes.delete(e.pointerId);
 
-    if (lane >= 0 && lane < 4) {
+    if (lane >= 0 && lane < gameState.laneCount) {
       if (gameState.gameState === GAME_STATES.PLAYING) releaseLane(lane);
       gameState.keyDown[lane] = false;
     }
@@ -204,21 +248,63 @@ export class InputHandler {
 
     // Game over buttons
     if (gameState.gameState === GAME_STATES.GAMEOVER) {
-      const retryX = (GAME.W - 190) / 2, retryY = GAME.H / 2 + 80, retryW = 190, retryH = 40;
-      if (tx >= retryX && tx < retryX + retryW && ty >= retryY && ty < retryY + retryH) {
-        this._retryGame();
+      const shopBtnX = (GAME.W - 200) / 2, shopBtnY = GAME.H / 2 + 80, shopBtnW = 200, shopBtnH = 42;
+      const menuX    = (GAME.W - 140) / 2, menuY    = GAME.H / 2 + 136, menuW    = 140, menuH    = 32;
+      if (tx >= menuX && tx < menuX + menuW && ty >= menuY && ty < menuY + menuH) {
+        musicPlayer.stop();
+        gameState.clearRun();
+        gameState.gameState = GAME_STATES.MUSIC_SELECT;
       } else {
         musicPlayer.stop();
-        gameState.gameState = GAME_STATES.MUSIC_SELECT;
+        gameState.enterShop();
       }
       return;
     }
 
+    // Shop touch handling
+    if (gameState.gameState === GAME_STATES.SHOP) {
+      this._handleShopTouch(tx, ty);
+      return;
+    }
+
     // Lane tap → drives TITLE→SELECT, PLAYING hits
-    const lane = Math.floor(tx / GAME.LANE_W);
-    if (lane >= 0 && lane < 4) {
+    const lane = Math.floor(tx / gameState.laneW);
+    if (lane >= 0 && lane < gameState.laneCount) {
       this._touchLanes.set(id, lane);
       this._onPress(lane);
+    }
+  }
+
+  _handleShopTouch(tx, ty) {
+    // START button
+    const btnW = 200, btnH = 38, btnX = (GAME.W - btnW) / 2, btnY = 770;
+    if (tx >= btnX && tx < btnX + btnW && ty >= btnY && ty < btnY + btnH) {
+      this._startGame();
+      return;
+    }
+
+    // Item cards: pick 3 cards laid out the same as renderer
+    const items  = gameState.shopItems;
+    const nCards = items.length;
+    if (nCards === 0) return;
+    const cardW  = 110;
+    const cardH  = 236;
+    const gap    = (GAME.W - nCards * cardW) / (nCards + 1);
+    const cardY  = 104;
+    const buyH   = 28;
+
+    for (let i = 0; i < nCards; i++) {
+      const cx  = gap + i * (cardW + gap);
+      if (tx < cx || tx >= cx + cardW || ty < cardY || ty >= cardY + cardH) continue;
+      // Select card on any tap
+      gameState.shopCursor = i;
+      // BUY button area (bottom of card)
+      const btnY2 = cardY + cardH - 44;
+      if (ty >= btnY2 && ty < btnY2 + buyH) {
+        const item = items[i];
+        if (item) this._buyShopItem(item, i);
+      }
+      return;
     }
   }
 
@@ -236,7 +322,7 @@ export class InputHandler {
       if (tx >= MS.CARD_X && tx < MS.CARD_X + MS.CARD_W &&
           ty >= cardY      && ty < cardY + MS.CARD_H) {
         if (gameState.musicSelectCursor === i) {
-          this._startGame();          // second tap on selected → play
+          this._enterShopFromSelect(); // second tap on selected → shop
         } else {
           gameState.musicSelectCursor = i;
           musicPlayer.stopPreview();
@@ -257,24 +343,27 @@ export class InputHandler {
     // START button (below panel)
     if (tx >= MS.BTN_X && tx < MS.BTN_X + MS.BTN_W &&
         ty >= MS.BTN_Y && ty < MS.BTN_Y + MS.BTN_H) {
-      this._startGame();
+      this._enterShopFromSelect();
       return;
     }
   }
 
   // ── Shared helpers ─────────────────────────────────────────────────
-  _retryGame() {
+  // Called from SHOP to actually start the game
+  _startGame() {
+    // If coming from MUSIC_SELECT, cursor is already set by _enterShopFromSelect
     musicPlayer.stop();
     gameState.startGame(null);
     musicPlayer.play(gameState.selectedTrack);
   }
 
-  _startGame() {
+  // Called from MUSIC_SELECT → goes to SHOP first
+  _enterShopFromSelect() {
     const cursor = gameState.musicSelectCursor;
     gameState.selectedTrack = cursor;
-    musicPlayer.stop();
-    gameState.startGame(null);
-    musicPlayer.play(cursor);
+    gameState.clearRun();
+    musicPlayer.stopPreview();
+    gameState.enterShop();
   }
 
   _onPress(lane) {
