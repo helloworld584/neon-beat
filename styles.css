@@ -1,22 +1,37 @@
-* { 
-  margin: 0; 
-  padding: 0; 
-  box-sizing: border-box; 
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
-html, body {
-  width: 100%; 
+html {
   height: 100%;
+  height: 100dvh;
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
   background: #000;
-  display: flex; 
-  justify-content: center; 
+  display: flex;
+  justify-content: center;
   align-items: center;
   overflow: hidden;
+  position: fixed;          /* prevent iOS rubber-band scroll */
+  top: 0; left: 0;
+  /* honour notch / home-bar safe areas */
+  padding: env(safe-area-inset-top)  env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-#c { 
-  display: block; 
-  max-height: 100vh; 
-  max-width: 100vw; 
-  touch-action: none; 
+#c {
+  display: block;
+  max-height: 100%;
+  max-width: 100%;
+  aspect-ratio: 390 / 844;  /* keeps 9:21 portrait ratio on any screen */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }

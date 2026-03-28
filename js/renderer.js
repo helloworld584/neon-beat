@@ -633,22 +633,37 @@ export class Renderer {
     }
   }
 
-  // ── Mute button (top-left during gameplay) ──────────────────────
+  // ── HUD overlay buttons (mute top-left, menu top-right) ─────────
   drawMuteButton(rc) {
-    const x = 8, y = 8, w = 50, h = 24;
+    // Mute toggle
+    const mx = 8, my = 8, mw = 50, mh = 24;
     rc.save();
     rc.fillStyle = gameState.isMuted ? 'rgba(255,40,40,0.35)' : 'rgba(0,0,0,0.55)';
     rc.strokeStyle = gameState.isMuted ? '#ff4444' : 'rgba(255,255,255,0.25)';
     rc.lineWidth = 1;
     rc.beginPath();
-    rc.roundRect(x, y, w, h, 5);
+    rc.roundRect(mx, my, mw, mh, 5);
     rc.fill();
     rc.stroke();
     rc.font = 'bold 9px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
     rc.fillStyle = gameState.isMuted ? '#ff6666' : 'rgba(255,255,255,0.55)';
-    rc.fillText(gameState.isMuted ? '\u266a OFF' : '\u266a  ON', x + w / 2, y + h / 2);
+    rc.fillText(gameState.isMuted ? '\u266a OFF' : '\u266a  ON', mx + mw / 2, my + mh / 2);
+
+    // Menu / back button (top-right, touch-friendly)
+    const bx = 332, by = 8, bw = 50, bh = 24;
+    rc.fillStyle = 'rgba(0,0,0,0.55)';
+    rc.strokeStyle = 'rgba(255,255,255,0.25)';
+    rc.lineWidth = 1;
+    rc.shadowBlur = 0;
+    rc.beginPath();
+    rc.roundRect(bx, by, bw, bh, 5);
+    rc.fill();
+    rc.stroke();
+    rc.fillStyle = 'rgba(255,255,255,0.55)';
+    rc.fillText('MENU', bx + bw / 2, by + bh / 2);
+
     rc.restore();
   }
 
@@ -917,7 +932,7 @@ export class Renderer {
     rc.fillText('[ \u2212 10ms       ] + 10ms', GAME.W / 2, offsetY + 14);
     rc.restore();
 
-    // ── Footer hints (two lines) ──────────────────────────────────
+    // ── Footer hints ──────────────────────────────────────────────
     rc.save();
     rc.font = '400 9px Orbitron,monospace';
     rc.textAlign = 'center';
@@ -925,15 +940,63 @@ export class Renderer {
     rc.fillStyle = 'rgba(255,255,255,0.28)';
     rc.fillText('\u2191\u2193 NAVIGATE  \u2022  \u2190\u2192 SPEED  \u2022  [ ] OFFSET',
       GAME.W / 2, py + ph - 32);
-    rc.fillText('ENTER SELECT  \u2022  SPACE PREVIEW  \u2022  ESC BACK',
+    rc.fillText('ENTER/TAP\u00d72 SELECT  \u2022  SPACE PREVIEW  \u2022  ESC BACK',
       GAME.W / 2, py + ph - 16);
+    rc.restore();
+
+    // ── BACK button (above panel, top-left) ───────────────────────
+    rc.save();
+    rc.font = 'bold 10px Orbitron,monospace';
+    rc.textAlign = 'left';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.38)';
+    rc.shadowBlur = 0;
+    rc.fillText('\u2190 BACK', px + 4, py - 18);
+    rc.restore();
+
+    // ── START button (below panel) ────────────────────────────────
+    const btnW = 200, btnH = 36;
+    const btnX = (GAME.W - btnW) / 2;
+    const btnY = 793;
+    const selTrack = TRACKS[gameState.musicSelectCursor];
+    rc.save();
+    rc.fillStyle = 'rgba(0,255,255,0.14)';
+    rc.strokeStyle = '#00ffff';
+    rc.lineWidth = 1.5;
+    rc.shadowBlur = 14;
+    rc.shadowColor = '#00ffff';
+    rc.beginPath();
+    rc.roundRect(btnX, btnY, btnW, btnH, 8);
+    rc.fill();
+    rc.stroke();
+    rc.shadowBlur = 6;
+    rc.font = 'bold 13px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = '#00ffff';
+    rc.fillText(`\u25b6  ${selTrack ? selTrack.title.toUpperCase() : 'PLAY'}`,
+      GAME.W / 2, btnY + btnH / 2);
     rc.restore();
   }
 
   renderEscConfirm(rc) {
     rc.save();
+
+    // Upper half = YES zone
     rc.fillStyle = 'rgba(0,0,0,0.72)';
-    rc.fillRect(0, 0, GAME.W, GAME.H);
+    rc.fillRect(0, 0, GAME.W, GAME.H / 2);
+    // Lower half = NO zone (slightly different tint so they feel distinct)
+    rc.fillStyle = 'rgba(0,0,20,0.72)';
+    rc.fillRect(0, GAME.H / 2, GAME.W, GAME.H / 2);
+
+    // Divider
+    rc.strokeStyle = 'rgba(255,255,255,0.12)';
+    rc.lineWidth = 1;
+    rc.beginPath();
+    rc.moveTo(0, GAME.H / 2);
+    rc.lineTo(GAME.W, GAME.H / 2);
+    rc.stroke();
+
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
 
@@ -941,18 +1004,30 @@ export class Renderer {
     rc.fillStyle = '#ffffff';
     rc.shadowBlur = 16;
     rc.shadowColor = '#00ffff';
-    rc.fillText('RETURN TO MENU?', GAME.W / 2, GAME.H / 2 - 28);
+    rc.fillText('RETURN TO MENU?', GAME.W / 2, GAME.H / 2 - 52);
 
-    rc.font = 'bold 13px Orbitron,monospace';
+    // YES button area
+    rc.font = 'bold 14px Orbitron,monospace';
     rc.fillStyle = '#00ffff';
     rc.shadowColor = '#00ffff';
     rc.shadowBlur = 10;
-    rc.fillText('Y  /  ENTER  →  YES', GAME.W / 2, GAME.H / 2 + 12);
+    rc.fillText('Y  /  ENTER  \u2192  YES', GAME.W / 2, GAME.H / 2 - 18);
+    rc.font = '400 9px Orbitron,monospace';
+    rc.fillStyle = 'rgba(0,255,255,0.40)';
+    rc.shadowBlur = 0;
+    rc.fillText('TAP TOP HALF', GAME.W / 2, GAME.H / 2 - 2);
 
-    rc.font = 'bold 13px Orbitron,monospace';
+    // NO button area
+    rc.font = 'bold 14px Orbitron,monospace';
     rc.fillStyle = '#ff00ff';
     rc.shadowColor = '#ff00ff';
-    rc.fillText('N  /  ESC    →  CANCEL', GAME.W / 2, GAME.H / 2 + 40);
+    rc.shadowBlur = 10;
+    rc.fillText('N  /  ESC  \u2192  CANCEL', GAME.W / 2, GAME.H / 2 + 22);
+    rc.font = '400 9px Orbitron,monospace';
+    rc.fillStyle = 'rgba(255,0,255,0.40)';
+    rc.shadowBlur = 0;
+    rc.fillText('TAP BOTTOM HALF', GAME.W / 2, GAME.H / 2 + 38);
+
     rc.restore();
   }
 
@@ -991,7 +1066,7 @@ export class Renderer {
       rc.fillStyle = '#fff';
       rc.shadowBlur = 6;
       rc.shadowColor = '#fff';
-      rc.fillText('PRESS  R  TO CONTINUE', GAME.W / 2, GAME.H / 2 + 88);
+      rc.fillText('TAP  OR  PRESS  R  TO CONTINUE', GAME.W / 2, GAME.H / 2 + 88);
     }
     rc.restore();
   }
