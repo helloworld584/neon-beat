@@ -652,7 +652,7 @@ export class Renderer {
       rc.textBaseline = 'middle';
       rc.fillStyle = col;
       rc.shadowBlur = 0;
-      rc.fillText(INPUT.KEY_LABELS[i], cx, keyY);
+      rc.fillText(INPUT.KEY_LABELS_4[i], cx, keyY);
       rc.restore();
     }
   }
