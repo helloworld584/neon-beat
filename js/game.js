@@ -4,6 +4,7 @@
 
 import { GAME, GAME_STATES, SPEED_MULTIPLIERS } from './constants.js';
 import { gameState } from './state.js';
+import { soundEngine } from './sound.js';
 
 // ── Shared scoring helper ─────────────────────────────────────────
 function applyScore(lane, grade) {
@@ -24,6 +25,8 @@ function applyScore(lane, grade) {
     grade,
   });
 
+  soundEngine.playHit(grade);
+
   if ([10, 25, 50].includes(gameState.combo)) {
     gameState.glitchT = 520;
     gameState.glitchStr = gameState.combo >= 50 ? 1.0 : gameState.combo >= 25 ? 0.7 : 0.45;
@@ -32,12 +35,26 @@ function applyScore(lane, grade) {
 
 // ── Called when a lane key is pressed ────────────────────────────
 export function hitLane(lane) {
+  const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx];
   let bestNote = null;
   let bestDistance = Infinity;
 
   for (const note of gameState.notes) {
     if (note.lane !== lane || note.state !== 'active') continue;
-    const distance = Math.abs(note.y - GAME.HIT_Y);
+
+    let distance;
+    if (note.type === 'hold') {
+      const tailY = note.y - note.duration * spd;
+      // Body covers hit zone → distance = 0 so it always qualifies
+      if (tailY <= GAME.HIT_Y && note.y >= GAME.HIT_Y - GAME.NOTE_H) {
+        distance = 0;
+      } else {
+        distance = Math.abs(note.y - GAME.HIT_Y);
+      }
+    } else {
+      distance = Math.abs(note.y - GAME.HIT_Y);
+    }
+
     if (distance < bestDistance) {
       bestNote = note;
       bestDistance = distance;
@@ -46,17 +63,13 @@ export function hitLane(lane) {
 
   if (!bestNote) return;
 
-  const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx];
   const ms = bestDistance / spd;
-
-  if (ms > GAME.GOOD_WIN) return; // too far, ignore
+  if (ms > GAME.GOOD_WIN) return;
 
   if (bestNote.type === 'hold') {
-    // Start hold — score awarded on completion or early release
     bestNote.state = 'holding';
     bestNote.holdTime = 0;
   } else {
-    // Tap note — score immediately
     const grade = ms <= GAME.PERF_WIN ? 'PERFECT' : 'GOOD';
     bestNote.state = 'hit';
     applyScore(bestNote.lane, grade);
@@ -106,10 +119,21 @@ export function update(dt) {
 
     // ── Miss check ────────────────────────────────────────────────
     if (note.state === 'active' && note.y > missThreshold) {
-      note.state = 'missed';
-      gameState.combo = 0;
-      gameState.judgeText = 'MISS';
-      gameState.judgeT = 420;
+      if (note.type === 'hold') {
+        // Hold notes: only miss when the tail also passes
+        const tailY = note.y - note.duration * spd;
+        if (tailY > missThreshold) {
+          note.state = 'missed';
+          gameState.combo = 0;
+          gameState.judgeText = 'MISS';
+          gameState.judgeT = 420;
+        }
+      } else {
+        note.state = 'missed';
+        gameState.combo = 0;
+        gameState.judgeText = 'MISS';
+        gameState.judgeT = 420;
+      }
     }
   }
 

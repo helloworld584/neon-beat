@@ -37,9 +37,10 @@ export class InputHandler {
   _setupEventListeners() {
     window.addEventListener('keydown', e => this._handleKeyDown(e));
     window.addEventListener('keyup',   e => this._handleKeyUp(e));
-    this.canvas.addEventListener('touchstart',  e => this._handleTouchStart(e),  { passive: false });
-    this.canvas.addEventListener('touchend',    e => this._handleTouchEnd(e),    { passive: false });
-    this.canvas.addEventListener('touchcancel', e => this._handleTouchEnd(e),    { passive: false });
+    // Pointer events handle both touch and mouse cross-browser (including iOS/Android)
+    this.canvas.addEventListener('pointerdown',  e => this._handlePointerDown(e),  { passive: false });
+    this.canvas.addEventListener('pointerup',    e => this._handlePointerUp(e),    { passive: false });
+    this.canvas.addEventListener('pointercancel',e => this._handlePointerUp(e),    { passive: false });
   }
 
   // ── Keyboard ───────────────────────────────────────────────────────
@@ -67,13 +68,18 @@ export class InputHandler {
       if (e.key === ']') { gameState.chartOffset += 10; gameState.startTime += 10; return; }
     }
 
+    if (gameState.gameState === GAME_STATES.GAMEOVER) {
+      if (e.key.toLowerCase() === 'r' || e.key === 'Enter') {
+        this._retryGame();
+      } else if (e.key === 'Escape') {
+        musicPlayer.stop();
+        gameState.gameState = GAME_STATES.MUSIC_SELECT;
+      }
+      return;
+    }
+
     const lane = INPUT.KEY_MAP[e.key.toLowerCase()];
     if (lane !== undefined) this._onPress(lane);
-
-    if (gameState.gameState === GAME_STATES.GAMEOVER && e.key.toLowerCase() === 'r') {
-      musicPlayer.stop();
-      gameState.gameState = GAME_STATES.TITLE;
-    }
 
     if (gameState.gameState === GAME_STATES.PLAYING && e.key.toLowerCase() === 'm') {
       gameState.isMuted = !gameState.isMuted;
@@ -132,35 +138,31 @@ export class InputHandler {
     }
   }
 
-  // ── Touch ──────────────────────────────────────────────────────────
-  _handleTouchStart(e) {
+  // ── Pointer (touch + mouse) ────────────────────────────────────────
+  _handlePointerDown(e) {
     e.preventDefault();
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    try { e.target.setPointerCapture(e.pointerId); } catch (_) {}
+
     const rect   = this.canvas.getBoundingClientRect();
     const scaleX = GAME.W / rect.width;
     const scaleY = GAME.H / rect.height;
-
-    for (const touch of e.changedTouches) {
-      const tx = (touch.clientX - rect.left) * scaleX;
-      const ty = (touch.clientY - rect.top)  * scaleY;
-      this._handleTouchPoint(tx, ty, touch.identifier);
-    }
+    const tx = (e.clientX - rect.left) * scaleX;
+    const ty = (e.clientY - rect.top)  * scaleY;
+    this._handleTouchPoint(tx, ty, e.pointerId);
   }
 
-  _handleTouchEnd(e) {
+  _handlePointerUp(e) {
     e.preventDefault();
     const rect   = this.canvas.getBoundingClientRect();
     const scaleX = GAME.W / rect.width;
+    const lane = this._touchLanes.get(e.pointerId)
+      ?? Math.floor((e.clientX - rect.left) * scaleX / GAME.LANE_W);
+    this._touchLanes.delete(e.pointerId);
 
-    for (const touch of e.changedTouches) {
-      // Use tracked lane (safe if finger slid to another lane)
-      const lane = this._touchLanes.get(touch.identifier)
-        ?? Math.floor((touch.clientX - rect.left) * scaleX / GAME.LANE_W);
-      this._touchLanes.delete(touch.identifier);
-
-      if (lane >= 0 && lane < 4) {
-        if (gameState.gameState === GAME_STATES.PLAYING) releaseLane(lane);
-        gameState.keyDown[lane] = false;
-      }
+    if (lane >= 0 && lane < 4) {
+      if (gameState.gameState === GAME_STATES.PLAYING) releaseLane(lane);
+      gameState.keyDown[lane] = false;
     }
   }
 

@@ -216,9 +216,9 @@ export class Renderer {
       const headY      = note.y;
       const tailY      = note.y - durationPx;
 
-      // Body rect (clamped to screen)
+      // Body rect (clamped to screen, clipped at HIT_Y since head-passed portion is "past")
       const drawTop = Math.max(0, tailY);
-      const drawBot = Math.min(GAME.H, headY);
+      const drawBot = Math.min(GAME.HIT_Y + GAME.NOTE_H / 2, Math.min(GAME.H, headY));
       if (drawBot > drawTop) {
         rc.fillStyle = `rgba(${fillRgb},0.18)`;
         rc.fillRect(bodyX, drawTop, bodyW, drawBot - drawTop);
@@ -1061,13 +1061,43 @@ export class Renderer {
     rc.shadowColor = '#00ffff';
     rc.fillText(`MAX COMBO  ${gameState.maxCombo}×`, GAME.W / 2, GAME.H / 2 + 36);
 
-    if (Math.sin(gameState.pulse * Math.PI * 2 * 1.2) > 0) {
-      rc.font = 'bold 11px Orbitron,monospace';
-      rc.fillStyle = '#fff';
-      rc.shadowBlur = 6;
-      rc.shadowColor = '#fff';
-      rc.fillText('TAP  OR  PRESS  R  TO CONTINUE', GAME.W / 2, GAME.H / 2 + 88);
-    }
+    // RETRY button
+    const retryX = (GAME.W - 190) / 2, retryY = GAME.H / 2 + 80, retryW = 190, retryH = 40;
+    rc.shadowBlur = 14;
+    rc.shadowColor = '#ff00ff';
+    rc.fillStyle = 'rgba(255,0,255,0.18)';
+    rc.strokeStyle = '#ff00ff';
+    rc.lineWidth = 1.5;
+    rc.beginPath();
+    rc.roundRect(retryX, retryY, retryW, retryH, 8);
+    rc.fill();
+    rc.stroke();
+    rc.shadowBlur = 6;
+    rc.font = 'bold 14px Orbitron,monospace';
+    rc.fillStyle = '#ff00ff';
+    rc.fillText('\u21ba  RETRY', GAME.W / 2, retryY + retryH / 2);
+
+    // MENU button
+    const menuX = (GAME.W - 140) / 2, menuY = GAME.H / 2 + 134, menuW = 140, menuH = 32;
+    rc.shadowBlur = 8;
+    rc.shadowColor = '#00ffff';
+    rc.fillStyle = 'rgba(0,255,255,0.10)';
+    rc.strokeStyle = 'rgba(0,255,255,0.55)';
+    rc.lineWidth = 1;
+    rc.beginPath();
+    rc.roundRect(menuX, menuY, menuW, menuH, 6);
+    rc.fill();
+    rc.stroke();
+    rc.shadowBlur = 0;
+    rc.font = 'bold 11px Orbitron,monospace';
+    rc.fillStyle = 'rgba(0,255,255,0.8)';
+    rc.fillText('MENU', GAME.W / 2, menuY + menuH / 2);
+
+    // Keyboard hints
+    rc.font = '400 9px Orbitron,monospace';
+    rc.fillStyle = 'rgba(255,255,255,0.25)';
+    rc.fillText('R / ENTER → RETRY   \u2022   ESC → MENU', GAME.W / 2, GAME.H / 2 + 184);
+
     rc.restore();
   }
 }
