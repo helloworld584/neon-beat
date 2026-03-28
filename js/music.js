@@ -3,6 +3,7 @@
 // ================================================================
 
 import { TRACKS } from './constants.js';
+import { analyzeAudio } from './beatdetect.js';
 
 class MusicPlayer {
   constructor() {
@@ -10,6 +11,11 @@ class MusicPlayer {
     this.previewTimer = null;
     this.isPreviewing = false;
     this._pendingPlay = false;
+    // BGM state (title / music-select background music)
+    this._bgmActive = false;
+    this._bgmTime = 0;     // saved position for restore after preview
+    // Per-track analysis cache: index → 'pending' | {bpm, beatMs, beats}
+    this._analysisCache = {};
   }
 
   init() {
@@ -36,10 +42,29 @@ class MusicPlayer {
     this.audio.currentTime = 0;
   }
 
+  // ── BGM (title / music-select background) ────────────────────────
+  // Plays neon_fury (track 0) at reduced volume. Safe to call if already running.
+  playBgm() {
+    if (this._bgmActive) return;
+    this._bgmActive = true;
+    if (!this.audio) return;
+    this.audio.src = `assets/music/${TRACKS[0].file}`;
+    this.audio.loop = true;
+    this.audio.volume = 0.4;
+    this.audio.currentTime = this._bgmTime || 0;
+    this.audio.play().catch((err) => {
+      console.warn('[MusicPlayer] BGM blocked:', err.name);
+    });
+    console.log('[MusicPlayer] BGM started');
+  }
+
+  // ── Game-track playback ───────────────────────────────────────────
   play(index) {
+    this._bgmActive = false;    // deactivate BGM before stopPreview
     this.stopPreview();
     this._load(index, true);
     this._pendingPlay = false;
+    this.audio.volume = 0.75;   // restore full game volume
     console.log('[MusicPlayer] calling audio.play()…');
     const p = this.audio.play();
     if (p !== undefined) {
@@ -62,6 +87,10 @@ class MusicPlayer {
   }
 
   preview(index) {
+    // Save BGM position so we can restore it after preview ends
+    if (this._bgmActive && this.audio) {
+      this._bgmTime = this.audio.currentTime;
+    }
     this.stopPreview();
     this._load(index, false);
     this.audio.play().catch(() => {});
@@ -80,6 +109,15 @@ class MusicPlayer {
         this.audio.currentTime = 0;
       }
       this.isPreviewing = false;
+      // Restore BGM if it was active when preview started
+      if (this._bgmActive && this.audio) {
+        this.audio.src = `assets/music/${TRACKS[0].file}`;
+        this.audio.loop = true;
+        this.audio.volume = 0.4;
+        this.audio.currentTime = this._bgmTime || 0;
+        this.audio.play().catch(() => {});
+        console.log('[MusicPlayer] BGM restored after preview');
+      }
     }
   }
 
@@ -96,6 +134,7 @@ class MusicPlayer {
   }
 
   stop() {
+    this._bgmActive = false;    // deactivate BGM before stopPreview
     this.stopPreview();
     this._pendingPlay = false;
     if (this.audio) {
@@ -106,6 +145,33 @@ class MusicPlayer {
 
   setMuted(muted) {
     if (this.audio) this.audio.muted = muted;
+  }
+
+  // ── Beat analysis ─────────────────────────────────────────────────
+  // Start async analysis for a track. Results cached by index.
+  async startAnalysis(index) {
+    if (this._analysisCache[index] !== undefined) return; // already running or done
+    this._analysisCache[index] = 'pending';
+    try {
+      const src = `assets/music/${TRACKS[index].file}`;
+      const result = await analyzeAudio(src);
+      this._analysisCache[index] = result;
+      console.log(`[MusicPlayer] analysis[${index}] done: bpm=${result.bpm} beats=${result.beats.length}`);
+    } catch (e) {
+      console.warn(`[MusicPlayer] analysis[${index}] failed:`, e);
+      delete this._analysisCache[index];
+    }
+  }
+
+  // Returns analysis result if done, or null if pending/unavailable.
+  getAnalysis(index) {
+    const v = this._analysisCache[index];
+    return (v && v !== 'pending') ? v : null;
+  }
+
+  // Returns true while analysis for this track is in progress.
+  isAnalyzing(index) {
+    return this._analysisCache[index] === 'pending';
   }
 }
 

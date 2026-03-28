@@ -5,6 +5,7 @@
 import { GAME, INPUT, GAME_STATES, TRACKS, SPEED_MULTIPLIERS } from './constants.js';
 import { gameState } from './state.js';
 import { musicPlayer } from './music.js';
+import { makeChartFromBeats } from './beatdetect.js';
 
 export class InputHandler {
   constructor(canvas, onHitLane) {
@@ -42,6 +43,20 @@ export class InputHandler {
       return;
     }
 
+    // [ / ] offset adjustment during gameplay (shifts chart timing ±10 ms)
+    if (gameState.gameState === GAME_STATES.PLAYING) {
+      if (e.key === '[') {
+        gameState.chartOffset -= 10;
+        gameState.startTime -= 10; // notes arrive earlier
+        return;
+      }
+      if (e.key === ']') {
+        gameState.chartOffset += 10;
+        gameState.startTime += 10; // notes arrive later
+        return;
+      }
+    }
+
     const lane = INPUT.KEY_MAP[e.key.toLowerCase()];
     if (lane !== undefined) {
       this.onPress(lane);
@@ -76,16 +91,22 @@ export class InputHandler {
     switch (key) {
       case 'ArrowUp':
       case 'w':
-      case 'W':
-        gameState.musicSelectCursor = (gameState.musicSelectCursor - 1 + count) % count;
+      case 'W': {
+        const newCursor = (gameState.musicSelectCursor - 1 + count) % count;
+        gameState.musicSelectCursor = newCursor;
         musicPlayer.stopPreview();
+        musicPlayer.startAnalysis(newCursor);
         break;
+      }
       case 'ArrowDown':
       case 's':
-      case 'S':
-        gameState.musicSelectCursor = (gameState.musicSelectCursor + 1) % count;
+      case 'S': {
+        const newCursor = (gameState.musicSelectCursor + 1) % count;
+        gameState.musicSelectCursor = newCursor;
         musicPlayer.stopPreview();
+        musicPlayer.startAnalysis(newCursor);
         break;
+      }
       case 'ArrowLeft':
         gameState.speedMultiplierIdx =
           (gameState.speedMultiplierIdx - 1 + SPEED_MULTIPLIERS.length) % SPEED_MULTIPLIERS.length;
@@ -94,12 +115,24 @@ export class InputHandler {
         gameState.speedMultiplierIdx =
           (gameState.speedMultiplierIdx + 1) % SPEED_MULTIPLIERS.length;
         break;
-      case 'Enter':
-        gameState.selectedTrack = gameState.musicSelectCursor;
-        musicPlayer.stop();
-        gameState.startGame();
-        musicPlayer.play(gameState.selectedTrack);
+      case '[':
+        gameState.chartOffset -= 10;
         break;
+      case ']':
+        gameState.chartOffset += 10;
+        break;
+      case 'Enter': {
+        const cursor = gameState.musicSelectCursor;
+        gameState.selectedTrack = cursor;
+        const analysis = musicPlayer.getAnalysis(cursor);
+        const chart = analysis
+          ? makeChartFromBeats(analysis.beats, analysis.beatMs)
+          : null;
+        musicPlayer.stop();
+        gameState.startGame(chart);
+        musicPlayer.play(cursor);
+        break;
+      }
       case 'Escape':
         musicPlayer.stopPreview();
         gameState.gameState = GAME_STATES.TITLE;
@@ -160,6 +193,9 @@ export class InputHandler {
     if (gameState.escConfirm) return;
 
     if (gameState.gameState === GAME_STATES.TITLE) {
+      // Start BGM and kick off analysis for the default track on first interaction
+      musicPlayer.playBgm();
+      musicPlayer.startAnalysis(gameState.musicSelectCursor);
       gameState.gameState = GAME_STATES.MUSIC_SELECT;
       return;
     }

@@ -35,15 +35,20 @@ class GameState {
     this.trackNameT = 0;
     // Speed multiplier index (persists across games)
     this.speedMultiplierIdx = 1;   // default 1.0x
+    // Chart timing offset in ms (persists across games, adjusted with [ / ] keys)
+    this.chartOffset = 0;
     // ESC-to-menu confirmation
     this.escConfirm = false;
   }
 
-  startGame() {
+  startGame(chart = null) {
     this.score = 0;
     this.combo = 0;
     this.maxCombo = 0;
-    this.notes = makeChart();
+    // Apply chartOffset to all notes (works for both detected and fallback charts)
+    const base = chart || makeChart();
+    const off = this.chartOffset;
+    this.notes = off !== 0 ? base.map(n => ({ ...n, time: n.time + off })) : base;
     this.effects = [];
     this.judgeText = '';
     this.judgeT = 0;

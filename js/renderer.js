@@ -426,6 +426,17 @@ export class Renderer {
       rc.fillText(`${fmt(elapsedSec)} / ${fmt(totalDur)}`, barX + barW, barY + barH + 3);
     }
 
+    // Chart offset badge — shown only when non-zero
+    if (gameState.chartOffset !== 0) {
+      rc.shadowBlur = 0;
+      rc.font = '400 9px Orbitron,monospace';
+      rc.textAlign = 'left';
+      rc.textBaseline = 'top';
+      rc.fillStyle = 'rgba(255,204,0,0.75)';
+      const offLabel = `OFF ${gameState.chartOffset > 0 ? '+' : ''}${gameState.chartOffset}ms`;
+      rc.fillText(offLabel, barX, barY + barH + 3);
+    }
+
     rc.restore();
   }
 
@@ -766,15 +777,41 @@ export class Renderer {
       rc.fillText(track.vibe, vx + vibeW / 2, vy + vh / 2);
       rc.restore();
 
-      // Preview hint (selected card only)
+      // Preview hint / BPM status (selected card only)
       if (sel) {
-        rc.save();
-        rc.font = '400 9px Orbitron,monospace';
-        rc.textAlign = 'right';
-        rc.textBaseline = 'middle';
-        rc.fillStyle = 'rgba(255,255,255,0.32)';
-        rc.fillText('\u25b6 SPACE', cardX + cardW - 10, lineB);
-        rc.restore();
+        const analysis  = musicPlayer.getAnalysis(i);
+        const analyzing = musicPlayer.isAnalyzing(i);
+
+        if (analysis) {
+          // Show detected BPM
+          rc.save();
+          rc.font = 'bold 9px Orbitron,monospace';
+          rc.textAlign = 'right';
+          rc.textBaseline = 'middle';
+          rc.fillStyle = '#00ffff';
+          rc.shadowBlur = 4;
+          rc.shadowColor = '#00ffff';
+          rc.fillText(`\u266a ${analysis.bpm} BPM`, cardX + cardW - 10, lineB);
+          rc.restore();
+        } else if (analyzing) {
+          // Show analysis progress indicator
+          rc.save();
+          rc.font = '400 9px Orbitron,monospace';
+          rc.textAlign = 'right';
+          rc.textBaseline = 'middle';
+          rc.fillStyle = 'rgba(255,220,0,0.75)';
+          rc.fillText('ANALYZING\u2026', cardX + cardW - 10, lineB);
+          rc.restore();
+        } else {
+          // Default: show preview hint
+          rc.save();
+          rc.font = '400 9px Orbitron,monospace';
+          rc.textAlign = 'right';
+          rc.textBaseline = 'middle';
+          rc.fillStyle = 'rgba(255,255,255,0.32)';
+          rc.fillText('\u25b6 SPACE', cardX + cardW - 10, lineB);
+          rc.restore();
+        }
       }
     }
 
@@ -816,15 +853,33 @@ export class Renderer {
     rc.fillText('\u2192', optStartX + totalW + 14, selectorY + 14 + optH / 2);
     rc.restore();
 
+    // ── Chart offset display ──────────────────────────────────────
+    const offsetY = selectorY + 14 + optH + 16;
+    rc.save();
+    rc.font = 'bold 10px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    const off = gameState.chartOffset;
+    const offStr = off === 0 ? 'OFFSET  0 ms' : `OFFSET  ${off > 0 ? '+' : ''}${off} ms`;
+    rc.fillStyle = off !== 0 ? '#ffcc00' : 'rgba(255,255,255,0.28)';
+    rc.shadowBlur = off !== 0 ? 6 : 0;
+    rc.shadowColor = '#ffcc00';
+    rc.fillText(offStr, GAME.W / 2, offsetY);
+    rc.font = '400 8px Orbitron,monospace';
+    rc.fillStyle = 'rgba(255,255,255,0.2)';
+    rc.shadowBlur = 0;
+    rc.fillText('[ \u2212 10ms       ] + 10ms', GAME.W / 2, offsetY + 14);
+    rc.restore();
+
     // ── Footer hints (two lines) ──────────────────────────────────
     rc.save();
     rc.font = '400 9px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
     rc.fillStyle = 'rgba(255,255,255,0.28)';
-    rc.fillText('\u2191\u2193 NAVIGATE  \u2022  \u2190\u2192 SPEED  \u2022  SPACE PREVIEW',
+    rc.fillText('\u2191\u2193 NAVIGATE  \u2022  \u2190\u2192 SPEED  \u2022  [ ] OFFSET',
       GAME.W / 2, py + ph - 32);
-    rc.fillText('ENTER SELECT  \u2022  ESC BACK',
+    rc.fillText('ENTER SELECT  \u2022  SPACE PREVIEW  \u2022  ESC BACK',
       GAME.W / 2, py + ph - 16);
     rc.restore();
   }
