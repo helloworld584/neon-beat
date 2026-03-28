@@ -38,13 +38,13 @@ export const GAME_STATES = {
 };
 
 export const TRACKS = [
-  { title: 'Neon Fury',                 artist: 'Neura-Flow',        vibe: 'AGGRESSIVE',  file: 'neon-fury.mp3' },
-  { title: 'Stranger Things',           artist: 'Music_Unlimited',   vibe: 'ADVENTURE',   file: 'stranger-things.mp3' },
-  { title: 'Pixel Rage',                artist: 'Neura-Flow',        vibe: 'SPORT',       file: 'pixel-rage.mp3' },
-  { title: 'Password Infinity',         artist: 'Evgeny_Bardyuzha',  vibe: 'ATMOSPHERIC', file: 'password-infinity.mp3' },
-  { title: 'Neon Odyssey',              artist: 'Grand_Project',     vibe: 'RETROWAVE',   file: 'neon-odyssey.mp3' },
-  { title: 'Cyberpunk Futuristic City', artist: 'INPLUSMUSIC',       vibe: 'FUTURISTIC',  file: 'cyberpunk-futuristic-city.mp3' },
-  { title: 'The Sun_Long',              artist: 'Grand_Project',     vibe: 'CINEMATIC',   file: 'the-sun-long.mp3' },
+  { title: 'Neon Fury',                 artist: 'Neura-Flow',        vibe: 'AGGRESSIVE',  file: 'neon_fury.mp3' },
+  { title: 'Stranger Things',           artist: 'Music_Unlimited',   vibe: 'ADVENTURE',   file: 'stranger_things.mp3' },
+  { title: 'Pixel Rage',                artist: 'Neura-Flow',        vibe: 'SPORT',       file: 'pixel_rage.mp3' },
+  { title: 'Password Infinity',         artist: 'Evgeny_Bardyuzha',  vibe: 'ATMOSPHERIC', file: 'password_infinity.mp3' },
+  { title: 'Neon Odyssey',              artist: 'Grand_Project',     vibe: 'RETROWAVE',   file: 'neon_odyssey.mp3' },
+  { title: 'Cyberpunk Futuristic City', artist: 'INPLUSMUSIC',       vibe: 'FUTURISTIC',  file: 'cyberpunk_city.mp3' },
+  { title: 'The Sun_Long',              artist: 'Grand_Project',     vibe: 'CINEMATIC',   file: 'the_sun_long.mp3' },
 ];
 
 export const SPEED_MULTIPLIERS = [0.75, 1.0, 1.25, 1.5];
