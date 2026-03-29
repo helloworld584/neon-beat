@@ -214,7 +214,7 @@ export class Renderer {
       if (gameState.noteShape === 'circle') {
         const cx2    = x + nw / 2;
         const cy2    = y + GAME.NOTE_H / 2;
-        const radius = Math.min(nw, GAME.NOTE_H) / 2 - 1;
+        const radius = nw / 2 - 3;
         rc.fillStyle = col;
         rc.beginPath();
         rc.arc(cx2, cy2, radius, 0, Math.PI * 2);
@@ -274,15 +274,29 @@ export class Renderer {
         rc.strokeRect(bodyX, drawTop, bodyW, drawBot - drawTop);
       }
 
-      // Tail cap (bright bar at the end of the hold)
+      // Tail cap (bright bar/circle at the end of the hold)
       if (tailY >= -8 && tailY <= GAME.H) {
         rc.globalAlpha = 0.80;
         rc.fillStyle = col;
         rc.shadowBlur = 10;
         rc.shadowColor = col;
         rc.beginPath();
-        rc.roundRect(capX, tailY - 4, nw, 8, 2);
+        if (gameState.noteShape === 'circle') {
+          rc.arc(capX + nw / 2, tailY, nw / 2 - 3, 0, Math.PI * 2);
+        } else {
+          rc.roundRect(capX, tailY - 4, nw, 8, 2);
+        }
         rc.fill();
+        rc.shadowBlur  = 0;
+        rc.strokeStyle = 'rgba(255,255,255,0.85)';
+        rc.lineWidth   = 1.5;
+        rc.beginPath();
+        if (gameState.noteShape === 'circle') {
+          rc.arc(capX + nw / 2, tailY, nw / 2 - 3, 0, Math.PI * 2);
+        } else {
+          rc.roundRect(capX + 1, tailY - 3, nw - 2, 6, 2);
+        }
+        rc.stroke();
       }
 
     } else if (note.state === 'holding') {
@@ -302,8 +316,22 @@ export class Renderer {
         rc.shadowBlur = 12;
         rc.shadowColor = col;
         rc.beginPath();
-        rc.roundRect(capX, topY - 4, nw, 8, 2);
+        if (gameState.noteShape === 'circle') {
+          rc.arc(capX + nw / 2, topY, nw / 2 - 3, 0, Math.PI * 2);
+        } else {
+          rc.roundRect(capX, topY - 4, nw, 8, 2);
+        }
         rc.fill();
+        rc.shadowBlur  = 0;
+        rc.strokeStyle = 'rgba(255,255,255,0.85)';
+        rc.lineWidth   = 1.5;
+        rc.beginPath();
+        if (gameState.noteShape === 'circle') {
+          rc.arc(capX + nw / 2, topY, nw / 2 - 3, 0, Math.PI * 2);
+        } else {
+          rc.roundRect(capX + 1, topY - 3, nw - 2, 6, 2);
+        }
+        rc.stroke();
       }
     }
 
@@ -367,7 +395,6 @@ export class Renderer {
   drawKeyButtons(rc) {
     const lc      = gameState.laneCount;
     const lw      = gameState.laneW;
-    const labels  = lc === 6 ? INPUT.KEY_LABELS_6 : INPUT.KEY_LABELS_4;
     const buttonY = GAME.HIT_Y + 58;
     const size    = Math.min(40, lw - 10);
 
@@ -392,7 +419,7 @@ export class Renderer {
       rc.textBaseline = 'middle';
       rc.fillStyle = pressed ? '#000' : col;
       rc.shadowBlur = 0;
-      rc.fillText(labels[i], cx, buttonY);
+      rc.fillText(gameState.getKeyLabel(i), cx, buttonY);
       rc.restore();
     }
   }

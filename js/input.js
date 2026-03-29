@@ -134,24 +134,28 @@ export class InputHandler {
       return;
     }
 
-    if (key === 'ArrowUp' || key === 'w' || key === 'W') {
-      gameState.keybindingSlot = slot <= 0 ? 3 : slot - 1;
-      return;
-    }
-    if (key === 'ArrowDown' || key === 's' || key === 'S') {
-      gameState.keybindingSlot = slot < 0 ? 0 : (slot + 1) % 4;
-      return;
-    }
-    if (key === 'Enter') {
-      if (slot < 0) gameState.keybindingSlot = 0;
+    // Slot active: any single printable key assigns (including w, s, etc.)
+    if (slot >= 0) {
+      if (key.length === 1) {
+        gameState.keyBindings[slot] = key.toLowerCase();
+        gameState.saveKeyBindings();
+        gameState.keybindingSlot = -1;
+      }
       return;
     }
 
-    // Any single printable char assigns to current slot
-    if (slot >= 0 && key.length === 1) {
-      gameState.keyBindings[slot] = key.toLowerCase();
-      gameState.saveKeyBindings();
-      gameState.keybindingSlot = -1;
+    // No slot active: navigation only
+    if (key === 'ArrowUp') {
+      gameState.keybindingSlot = slot <= 0 ? 3 : slot - 1;
+      return;
+    }
+    if (key === 'ArrowDown') {
+      gameState.keybindingSlot = (slot + 1) % 4;
+      return;
+    }
+    if (key === 'Enter') {
+      gameState.keybindingSlot = 0;
+      return;
     }
   }
 
