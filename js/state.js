@@ -13,6 +13,14 @@ class GameState {
     this.currentRun = { modifiers: [] };
     this.shopItems   = [];  // 3 items shown in shop
     this.shopCursor  = 0;   // selected shop card (0-2)
+    // Note shape ('rectangle' | 'circle'), persisted
+    this.noteShape = localStorage.getItem('neonbeat_note_shape') || 'rectangle';
+    // Key bindings: { [laneIndex]: 'key_char' }, persisted
+    this.keyBindings = (() => {
+      try { return JSON.parse(localStorage.getItem('neonbeat_keybindings')) || null; }
+      catch { return null; }
+    })() || { 0: 'd', 1: 'f', 2: 'j', 3: 'k' };
+    this.keybindingSlot = -1;  // lane being reassigned (-1 = none)
     this.reset();
   }
 
@@ -25,6 +33,31 @@ class GameState {
 
   saveCredits() {
     localStorage.setItem('neonbeat_credits', String(this.credits));
+  }
+
+  saveNoteShape() {
+    localStorage.setItem('neonbeat_note_shape', this.noteShape);
+  }
+
+  saveKeyBindings() {
+    localStorage.setItem('neonbeat_keybindings', JSON.stringify(this.keyBindings));
+  }
+
+  // Build { key_char: laneIndex } map from current bindings
+  getKeyMap() {
+    const defaults6 = { 0: 'd', 1: 'f', 2: 'g', 3: 'h', 4: 'j', 5: 'k' };
+    const map = {};
+    for (let i = 0; i < this.laneCount; i++) {
+      const k = this.keyBindings[i] ?? defaults6[i] ?? String(i);
+      map[k] = i;
+    }
+    return map;
+  }
+
+  // Returns uppercase display label for a lane
+  getKeyLabel(lane) {
+    const defaults = { 0: 'd', 1: 'f', 2: 'j', 3: 'k', 4: 'g', 5: 'h' };
+    return (this.keyBindings[lane] ?? defaults[lane] ?? '?').toUpperCase();
   }
 
   // Pick 3 random shop items not already owned this run
@@ -79,6 +112,9 @@ class GameState {
     this.combo = 0;
     this.maxCombo = 0;
     this.allPerfect = true;
+    this.perfectCount = 0;
+    this.goodCount    = 0;
+    this.missCount    = 0;
 
     // Build base chart and apply timing offset
     const base = chart || makeChart();

@@ -11,6 +11,8 @@ function applyScore(lane, grade) {
   gameState.combo++;
   if (gameState.combo > gameState.maxCombo) gameState.maxCombo = gameState.combo;
 
+  if (grade === 'PERFECT') gameState.perfectCount++;
+  else                     gameState.goodCount++;
   if (grade !== 'PERFECT') gameState.allPerfect = false;
 
   let comboMult = 1 + Math.floor(gameState.combo / 10) * 0.5;
@@ -148,6 +150,7 @@ export function update(dt) {
         note.state = 'missed';
         gameState.combo = 0;
         gameState.allPerfect = false;
+        gameState.missCount++;
         gameState.judgeText = 'MISS';
         gameState.judgeT = 420;
         // score_virus: miss deducts 100 pts

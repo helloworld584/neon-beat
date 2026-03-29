@@ -18,6 +18,7 @@ export const GAME = {
   SPD: (714 - (-32)) / (3 * (60000 / 128)), // px/ms ≈ 0.5126
   PERF_WIN: 50,                  // ± ms perfect
   GOOD_WIN: 100,                 // ± ms good
+  NOTE_SHAPE: 'rectangle',       // 'rectangle' | 'circle'
 };
 
 export const INPUT = {
@@ -39,6 +40,7 @@ export const GAME_STATES = {
   SHOP: 'SHOP',
   PLAYING: 'PLAYING',
   GAMEOVER: 'GAMEOVER',
+  KEYBINDINGS: 'KEYBINDINGS',
 };
 
 export const TRACKS = [

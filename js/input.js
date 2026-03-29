@@ -52,6 +52,24 @@ export class InputHandler {
       return;
     }
 
+    if (gameState.gameState === GAME_STATES.KEYBINDINGS) {
+      this._handleKeyBindingsKey(e.key);
+      return;
+    }
+
+    if (gameState.gameState === GAME_STATES.TITLE) {
+      if (e.key.toLowerCase() === 's') {
+        gameState.noteShape = gameState.noteShape === 'circle' ? 'rectangle' : 'circle';
+        gameState.saveNoteShape();
+        return;
+      }
+      if (e.key.toLowerCase() === 'k') {
+        gameState.keybindingSlot = -1;
+        gameState.gameState = GAME_STATES.KEYBINDINGS;
+        return;
+      }
+    }
+
     if (gameState.gameState === GAME_STATES.MUSIC_SELECT) {
       this._handleMusicSelectKey(e.key);
       return;
@@ -85,7 +103,7 @@ export class InputHandler {
       return;
     }
 
-    const keyMap = gameState.laneCount === 6 ? INPUT.KEY_MAP_6 : INPUT.KEY_MAP_4;
+    const keyMap = gameState.getKeyMap();
     const lane = keyMap[e.key.toLowerCase()];
     if (lane !== undefined) this._onPress(lane);
 
@@ -96,11 +114,44 @@ export class InputHandler {
   }
 
   _handleKeyUp(e) {
-    const keyMap = gameState.laneCount === 6 ? INPUT.KEY_MAP_6 : INPUT.KEY_MAP_4;
+    const keyMap = gameState.getKeyMap();
     const lane = keyMap[e.key.toLowerCase()];
     if (lane !== undefined) {
       if (gameState.gameState === GAME_STATES.PLAYING) releaseLane(lane);
       gameState.keyDown[lane] = false;
+    }
+  }
+
+  _handleKeyBindingsKey(key) {
+    const slot = gameState.keybindingSlot;
+
+    if (key === 'Escape') {
+      if (slot >= 0) {
+        gameState.keybindingSlot = -1;
+      } else {
+        gameState.gameState = GAME_STATES.TITLE;
+      }
+      return;
+    }
+
+    if (key === 'ArrowUp' || key === 'w' || key === 'W') {
+      gameState.keybindingSlot = slot <= 0 ? 3 : slot - 1;
+      return;
+    }
+    if (key === 'ArrowDown' || key === 's' || key === 'S') {
+      gameState.keybindingSlot = slot < 0 ? 0 : (slot + 1) % 4;
+      return;
+    }
+    if (key === 'Enter') {
+      if (slot < 0) gameState.keybindingSlot = 0;
+      return;
+    }
+
+    // Any single printable char assigns to current slot
+    if (slot >= 0 && key.length === 1) {
+      gameState.keyBindings[slot] = key.toLowerCase();
+      gameState.saveKeyBindings();
+      gameState.keybindingSlot = -1;
     }
   }
 
@@ -248,13 +299,15 @@ export class InputHandler {
 
     // Game over buttons
     if (gameState.gameState === GAME_STATES.GAMEOVER) {
-      const shopBtnX = (GAME.W - 200) / 2, shopBtnY = GAME.H / 2 + 80, shopBtnW = 200, shopBtnH = 42;
-      const menuX    = (GAME.W - 140) / 2, menuY    = GAME.H / 2 + 136, menuW    = 140, menuH    = 32;
-      if (tx >= menuX && tx < menuX + menuW && ty >= menuY && ty < menuY + menuH) {
+      // Coordinates must match renderGameOver() in renderer.js
+      // scoreY = 120 + 5*48 + 28 = 388, gradeY = 468, divY = 540
+      const retryBtnX = (GAME.W - 180) / 2, retryBtnY = 564, retryBtnW = 180, retryBtnH = 40;
+      const menuBtnX  = (GAME.W - 130) / 2, menuBtnY  = 616, menuBtnW  = 130, menuBtnH  = 32;
+      if (tx >= menuBtnX && tx < menuBtnX + menuBtnW && ty >= menuBtnY && ty < menuBtnY + menuBtnH) {
         musicPlayer.stop();
         gameState.clearRun();
         gameState.gameState = GAME_STATES.MUSIC_SELECT;
-      } else {
+      } else if (tx >= retryBtnX && tx < retryBtnX + retryBtnW && ty >= retryBtnY && ty < retryBtnY + retryBtnH) {
         musicPlayer.stop();
         gameState.enterShop();
       }
@@ -265,6 +318,39 @@ export class InputHandler {
     if (gameState.gameState === GAME_STATES.SHOP) {
       this._handleShopTouch(tx, ty);
       return;
+    }
+
+    // Key bindings screen touch handling
+    if (gameState.gameState === GAME_STATES.KEYBINDINGS) {
+      // BACK button (top-left)
+      if (ty <= 70 && tx <= 100) {
+        gameState.keybindingSlot = -1;
+        gameState.gameState = GAME_STATES.TITLE;
+        return;
+      }
+      // Slot boxes: bx=240, bw=70, slotStartY=210, slotGap=80, bh=40
+      const slotStartY = 210, slotGap = 80, bx = 240, bw = 70, bh = 40;
+      for (let i = 0; i < 4; i++) {
+        const cy = slotStartY + i * slotGap;
+        if (tx >= bx && tx < bx + bw && ty >= cy - bh / 2 && ty < cy + bh / 2) {
+          gameState.keybindingSlot = gameState.keybindingSlot === i ? -1 : i;
+          return;
+        }
+      }
+      return;
+    }
+
+    // Title screen utility buttons (NOTE SHAPE and KEYBINDS), y=656 h=26
+    if (gameState.gameState === GAME_STATES.TITLE && ty >= 650 && ty < 688) {
+      if (tx < GAME.W / 2) {
+        gameState.noteShape = gameState.noteShape === 'circle' ? 'rectangle' : 'circle';
+        gameState.saveNoteShape();
+        return;
+      } else {
+        gameState.keybindingSlot = -1;
+        gameState.gameState = GAME_STATES.KEYBINDINGS;
+        return;
+      }
     }
 
     // Lane tap → drives TITLE→SELECT, PLAYING hits

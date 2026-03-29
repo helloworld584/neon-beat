@@ -27,6 +27,9 @@ export class Renderer {
     } else if (gameState.gameState === GAME_STATES.SHOP) {
       this.renderShop(this.offCtx);
       this.drawScanlines(this.offCtx);
+    } else if (gameState.gameState === GAME_STATES.KEYBINDINGS) {
+      this.renderKeyBindings(this.offCtx);
+      this.drawScanlines(this.offCtx);
     } else {
       this.drawScrollBG(this.offCtx);
       this.drawLanes(this.offCtx);
@@ -192,10 +195,9 @@ export class Renderer {
       if (note.state !== 'active') continue;
       if (note.y < GAME.SPAWN_Y - 10 || note.y > GAME.HIT_Y + 60) continue;
 
-      const x = note.lane * lw + (lw - nw) / 2;
-      const y = note.y - GAME.NOTE_H / 2;
-      const isCyan  = note.lane % 2 === 0;
-      const noteImg = isCyan ? noteCyan : noteMagenta;
+      const x   = note.lane * lw + (lw - nw) / 2;
+      const y   = note.y - GAME.NOTE_H / 2;
+      const col = VISUAL.LANE_COL[note.lane];
 
       // ghost_notes: fade out as the note approaches the hit zone
       let alpha = 1;
@@ -206,14 +208,38 @@ export class Renderer {
 
       rc.save();
       rc.globalAlpha = alpha;
-      if (noteImg) {
-        rc.drawImage(noteImg, x, y, nw, GAME.NOTE_H);
+      rc.shadowBlur  = 20;
+      rc.shadowColor = col;
+
+      if (gameState.noteShape === 'circle') {
+        const cx2    = x + nw / 2;
+        const cy2    = y + GAME.NOTE_H / 2;
+        const radius = Math.min(nw, GAME.NOTE_H) / 2 - 1;
+        rc.fillStyle = col;
+        rc.beginPath();
+        rc.arc(cx2, cy2, radius, 0, Math.PI * 2);
+        rc.fill();
+        // White ring
+        rc.shadowBlur  = 0;
+        rc.strokeStyle = 'rgba(255,255,255,0.9)';
+        rc.lineWidth   = 2;
+        rc.beginPath();
+        rc.arc(cx2, cy2, radius, 0, Math.PI * 2);
+        rc.stroke();
       } else {
-        rc.fillStyle = VISUAL.LANE_COL[note.lane];
-        rc.shadowBlur = 10;
-        rc.shadowColor = VISUAL.LANE_COL[note.lane];
-        rc.fillRect(x, y, nw, GAME.NOTE_H);
+        // Rectangle — full opacity, strong glow, white border
+        rc.fillStyle = col;
+        rc.beginPath();
+        rc.roundRect(x, y, nw, GAME.NOTE_H, 4);
+        rc.fill();
+        rc.shadowBlur  = 0;
+        rc.strokeStyle = 'rgba(255,255,255,0.85)';
+        rc.lineWidth   = 2;
+        rc.beginPath();
+        rc.roundRect(x + 1, y + 1, nw - 2, GAME.NOTE_H - 2, 3);
+        rc.stroke();
       }
+
       rc.restore();
     }
   }
@@ -623,19 +649,20 @@ export class Renderer {
     rc.shadowBlur = 0;
     rc.fillText('CYBERPUNK RHYTHM GAME  ♦  128 BPM', GAME.W / 2, 432);
     
-    // Blink prompt
+    // Blink prompt — show actual bound keys
     if (Math.sin(gameState.pulse * Math.PI * 2 * 1.2) > 0) {
+      const startKeys = [0, 1, 2, 3].map(i => gameState.getKeyLabel(i)).join(' / ');
       rc.font = 'bold 12px Orbitron,monospace';
       rc.fillStyle = '#fff';
       rc.shadowBlur = 10;
       rc.shadowColor = '#fff';
-      rc.fillText('PRESS  D / F / J / K  TO START', GAME.W / 2, 540);
+      rc.fillText(`PRESS  ${startKeys}  TO START`, GAME.W / 2, 540);
     }
-    
-    // Key row
+
+    // Key row (4 keys with current labels)
     const keyY = 598;
     for (let i = 0; i < 4; i++) {
-      const cx = GAME.W / 2 + (i - 1.5) * 62;
+      const cx  = GAME.W / 2 + (i - 1.5) * 62;
       const col = VISUAL.LANE_COL[i];
       rc.save();
       rc.strokeStyle = col;
@@ -652,9 +679,63 @@ export class Renderer {
       rc.textBaseline = 'middle';
       rc.fillStyle = col;
       rc.shadowBlur = 0;
-      rc.fillText(INPUT.KEY_LABELS_4[i], cx, keyY);
+      rc.fillText(gameState.getKeyLabel(i), cx, keyY);
       rc.restore();
     }
+
+    // ── Bottom utility buttons ────────────────────────────────────────
+    // [NOTE SHAPE]  [KEYBINDS]
+    const btnY  = 656;
+    const btnH  = 26;
+
+    // NOTE SHAPE toggle
+    const shapeLabel = `NOTE: ${gameState.noteShape === 'circle' ? '\u25cf CIRCLE' : '\u25a0 RECT'}`;
+    rc.save();
+    rc.font = 'bold 9px Orbitron,monospace';
+    const shapeW = rc.measureText(shapeLabel).width + 20;
+    const shapeX = GAME.W / 2 - shapeW - 6;
+    rc.fillStyle  = 'rgba(0,255,255,0.10)';
+    rc.strokeStyle = 'rgba(0,255,255,0.5)';
+    rc.lineWidth = 1;
+    rc.beginPath();
+    rc.roundRect(shapeX, btnY, shapeW, btnH, 5);
+    rc.fill();
+    rc.stroke();
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = '#00ffff';
+    rc.shadowBlur = 0;
+    rc.fillText(shapeLabel, shapeX + shapeW / 2, btnY + btnH / 2);
+    rc.restore();
+
+    // KEYBINDS button
+    const kbLabel = 'KEYBINDS';
+    rc.save();
+    rc.font = 'bold 9px Orbitron,monospace';
+    const kbW = rc.measureText(kbLabel).width + 20;
+    const kbX = GAME.W / 2 + 6;
+    rc.fillStyle   = 'rgba(255,0,255,0.10)';
+    rc.strokeStyle = 'rgba(255,0,255,0.5)';
+    rc.lineWidth = 1;
+    rc.beginPath();
+    rc.roundRect(kbX, btnY, kbW, btnH, 5);
+    rc.fill();
+    rc.stroke();
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = '#ff00ff';
+    rc.shadowBlur = 0;
+    rc.fillText(kbLabel, kbX + kbW / 2, btnY + btnH / 2);
+    rc.restore();
+
+    // Hint below buttons
+    rc.save();
+    rc.font = '400 8px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.22)';
+    rc.fillText('S \u2192 NOTE SHAPE   \u2022   K \u2192 KEYBINDS', GAME.W / 2, btnY + btnH + 10);
+    rc.restore();
   }
 
   // ── HUD overlay buttons (mute top-left, menu top-right) ─────────
@@ -1242,6 +1323,110 @@ export class Renderer {
     rc.restore();
   }
 
+  // ── Key bindings screen ───────────────────────────────────────────
+  renderKeyBindings(rc) {
+    rc.fillStyle = '#02000d';
+    rc.fillRect(0, 0, GAME.W, GAME.H);
+
+    // hud_frame overlay
+    const frame = getImage('hud_frame');
+    if (frame) {
+      rc.save();
+      rc.globalAlpha = 0.35;
+      rc.drawImage(frame, 30, 90, GAME.W - 60, 520);
+      rc.restore();
+    }
+
+    // Back hint (top-left)
+    rc.save();
+    rc.font = 'bold 10px Orbitron,monospace';
+    rc.textAlign = 'left';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.35)';
+    rc.fillText('\u2190 BACK', 20, 56);
+    rc.restore();
+
+    // Header
+    rc.save();
+    rc.font = '900 20px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = '#00ffff';
+    rc.shadowBlur = 16;
+    rc.shadowColor = '#00ffff';
+    rc.fillText('KEY  BINDINGS', GAME.W / 2, 148);
+    rc.restore();
+
+    // Divider
+    rc.save();
+    rc.strokeStyle = 'rgba(0,255,255,0.25)';
+    rc.lineWidth = 1;
+    rc.beginPath();
+    rc.moveTo(60, 172); rc.lineTo(GAME.W - 60, 172);
+    rc.stroke();
+    rc.restore();
+
+    // 4 lane slots
+    const laneNames  = ['LANE 1', 'LANE 2', 'LANE 3', 'LANE 4'];
+    const slotStartY = 210;
+    const slotGap    = 80;
+
+    for (let i = 0; i < 4; i++) {
+      const cy  = slotStartY + i * slotGap;
+      const sel = gameState.keybindingSlot === i;
+      const col = VISUAL.LANE_COL[i];
+      const lbl = gameState.getKeyLabel(i);
+
+      rc.save();
+
+      // Lane name label (left side)
+      rc.font = `bold 13px Orbitron,monospace`;
+      rc.textAlign = 'left';
+      rc.textBaseline = 'middle';
+      rc.fillStyle   = sel ? '#ffffff' : col;
+      rc.shadowBlur  = sel ? 8 : 0;
+      rc.shadowColor = col;
+      rc.fillText(laneNames[i], 70, cy);
+
+      // Key slot box (right side)
+      const bx = 240, bw = 70, bh = 40, by = cy - bh / 2;
+      const flash = sel && Math.sin(gameState.pulse * Math.PI * 2 * 3) > 0;
+      rc.fillStyle   = sel ? (flash ? 'rgba(255,0,255,0.30)' : 'rgba(255,0,255,0.10)')
+                           : 'rgba(0,255,255,0.08)';
+      rc.strokeStyle = sel ? '#ff00ff' : 'rgba(0,255,255,0.4)';
+      rc.lineWidth   = sel ? 2 : 1;
+      rc.shadowBlur  = sel ? 14 : 0;
+      rc.shadowColor = '#ff00ff';
+      rc.beginPath();
+      rc.roundRect(bx, by, bw, bh, 6);
+      rc.fill();
+      rc.stroke();
+
+      // Key label
+      rc.font = 'bold 20px Orbitron,monospace';
+      rc.textAlign    = 'center';
+      rc.textBaseline = 'middle';
+      rc.fillStyle    = sel ? '#ff88ff' : '#00ffff';
+      rc.shadowBlur   = 0;
+      rc.fillText(sel && flash ? '_' : lbl, bx + bw / 2, cy);
+
+      rc.restore();
+    }
+
+    // Hint text
+    rc.save();
+    rc.font = '400 9px Orbitron,monospace';
+    rc.textAlign    = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle    = 'rgba(255,255,255,0.30)';
+    if (gameState.keybindingSlot >= 0) {
+      rc.fillText('PRESS ANY KEY TO ASSIGN  \u2022  ESC TO CANCEL', GAME.W / 2, 550);
+    } else {
+      rc.fillText('\u2191\u2193 / TAP TO SELECT   \u2022   ENTER TO ASSIGN   \u2022   ESC BACK', GAME.W / 2, 550);
+    }
+    rc.restore();
+  }
+
   renderEscConfirm(rc) {
     rc.save();
 
@@ -1296,70 +1481,181 @@ export class Renderer {
 
   renderGameOver(rc) {
     rc.save();
-    rc.fillStyle = 'rgba(0,0,0,0.75)';
+    rc.fillStyle = 'rgba(4,0,20,0.92)';
     rc.fillRect(0, 0, GAME.W, GAME.H);
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
 
-    rc.font = '900 36px Orbitron,monospace';
+    // ── Header ──────────────────────────────────────────────────────
+    rc.font = '900 18px Orbitron,monospace';
     rc.fillStyle = '#ff00ff';
-    rc.shadowBlur = 22;
+    rc.shadowBlur = 16;
     rc.shadowColor = '#ff00ff';
-    rc.fillText('GAME OVER', GAME.W / 2, GAME.H / 2 - 92);
+    rc.fillText('NEON//BEAT', GAME.W / 2, 60);
 
-    rc.font = 'bold 20px Orbitron,monospace';
-    rc.fillStyle = '#fff';
-    rc.shadowColor = '#00ffff';
-    rc.shadowBlur = 12;
-    rc.fillText(gameState.score.toString().padStart(8, '0'), GAME.W / 2, GAME.H / 2 - 34);
+    // Track title
+    const track = TRACKS[gameState.selectedTrack];
+    if (track) {
+      rc.font = '400 10px Orbitron,monospace';
+      rc.fillStyle = 'rgba(255,255,255,0.45)';
+      rc.shadowBlur = 0;
+      rc.fillText(track.title.toUpperCase(), GAME.W / 2, 84);
+    }
 
+    // ── Stats table ──────────────────────────────────────────────────
+    const total    = gameState.perfectCount + gameState.goodCount + gameState.missCount;
+    const accuracy = total > 0
+      ? (gameState.perfectCount + gameState.goodCount * 0.5) / total * 100
+      : 100;
+
+    const rows = [
+      { label: 'PERFECT',   value: String(gameState.perfectCount),           color: '#00ffff'  },
+      { label: 'GOOD',      value: String(gameState.goodCount),               color: '#ffcc00'  },
+      { label: 'MISS',      value: String(gameState.missCount),               color: '#ff4444'  },
+      { label: 'MAX COMBO', value: `${gameState.maxCombo}\u00d7`,             color: '#ff00ff'  },
+      { label: 'ACCURACY',  value: `${accuracy.toFixed(1)}%`,                 color: '#ffffff'  },
+    ];
+
+    const rowStartY = 120;
+    const rowH      = 48;
+    const labelX    = 50;
+    const valueBoxX = GAME.W - 155;
+    const valueBoxW = 120;
+    const valueBoxH = 32;
+
+    for (let i = 0; i < rows.length; i++) {
+      const { label, value, color } = rows[i];
+      const cy = rowStartY + i * rowH + rowH / 2;
+
+      rc.save();
+
+      // Label
+      rc.font = 'bold 11px Orbitron,monospace';
+      rc.textAlign    = 'left';
+      rc.textBaseline = 'middle';
+      rc.fillStyle    = 'rgba(255,255,255,0.55)';
+      rc.shadowBlur   = 0;
+      rc.fillText(label, labelX, cy);
+
+      // Value box
+      rc.fillStyle   = `rgba(${color === '#ff4444' ? '255,68,68' : color === '#ffcc00' ? '255,204,0' : color === '#ff00ff' ? '255,0,255' : '0,255,255'},0.08)`;
+      rc.strokeStyle = color;
+      rc.lineWidth   = 1;
+      rc.shadowBlur  = 4;
+      rc.shadowColor = color;
+      rc.beginPath();
+      rc.roundRect(valueBoxX, cy - valueBoxH / 2, valueBoxW, valueBoxH, 4);
+      rc.fill();
+      rc.stroke();
+
+      // Value text
+      rc.font = 'bold 14px Orbitron,monospace';
+      rc.textAlign    = 'center';
+      rc.textBaseline = 'middle';
+      rc.fillStyle    = color;
+      rc.shadowBlur   = 6;
+      rc.shadowColor  = color;
+      rc.fillText(value, valueBoxX + valueBoxW / 2, cy);
+
+      rc.restore();
+    }
+
+    // ── Score (large) ────────────────────────────────────────────────
+    const scoreY = rowStartY + rows.length * rowH + 28;
+    rc.save();
     rc.font = '400 10px Orbitron,monospace';
-    rc.fillStyle = 'rgba(255,255,255,0.45)';
-    rc.shadowBlur = 0;
-    rc.fillText('FINAL SCORE', GAME.W / 2, GAME.H / 2 - 6);
+    rc.textAlign    = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle    = 'rgba(255,255,255,0.38)';
+    rc.fillText('SCORE', GAME.W / 2, scoreY - 2);
+    rc.font = 'bold 32px Orbitron,monospace';
+    rc.fillStyle   = '#ffcc00';
+    rc.shadowBlur  = 18;
+    rc.shadowColor = '#ffcc00';
+    rc.fillText(gameState.score.toLocaleString(), GAME.W / 2, scoreY + 26);
+    rc.restore();
 
-    rc.font = 'bold 15px Orbitron,monospace';
-    rc.fillStyle = '#00ffff';
-    rc.shadowBlur = 10;
-    rc.shadowColor = '#00ffff';
-    rc.fillText(`MAX COMBO  ${gameState.maxCombo}×`, GAME.W / 2, GAME.H / 2 + 36);
+    // ── Grade ────────────────────────────────────────────────────────
+    let grade, gradeColor;
+    if (accuracy >= 100) { grade = 'S'; gradeColor = '#ffcc00'; }
+    else if (accuracy >= 95) { grade = 'A'; gradeColor = '#00ffff'; }
+    else if (accuracy >= 85) { grade = 'B'; gradeColor = '#00ff88'; }
+    else if (accuracy >= 70) { grade = 'C'; gradeColor = '#ffcc00'; }
+    else                      { grade = 'D'; gradeColor = '#ff4422'; }
 
-    // → SHOP button (primary CTA)
-    const shopBtnX = (GAME.W - 200) / 2, shopBtnY = GAME.H / 2 + 80, shopBtnW = 200, shopBtnH = 42;
-    rc.shadowBlur = 14;
+    const gradeY = scoreY + 80;
+    rc.save();
+    rc.font = '400 9px Orbitron,monospace';
+    rc.textAlign    = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle    = 'rgba(255,255,255,0.35)';
+    rc.fillText('GRADE', GAME.W / 2, gradeY - 2);
+    rc.font = '900 52px Orbitron,monospace';
+    rc.fillStyle   = gradeColor;
+    rc.shadowBlur  = 24;
+    rc.shadowColor = gradeColor;
+    rc.fillText(grade, GAME.W / 2, gradeY + 36);
+    rc.restore();
+
+    // ── Divider ──────────────────────────────────────────────────────
+    const divY = gradeY + 72;
+    rc.save();
+    rc.strokeStyle = 'rgba(255,255,255,0.10)';
+    rc.lineWidth   = 1;
+    rc.beginPath();
+    rc.moveTo(40, divY); rc.lineTo(GAME.W - 40, divY);
+    rc.stroke();
+    rc.restore();
+
+    // ── Buttons ──────────────────────────────────────────────────────
+    const retryBtnY = divY + 24;
+    const retryBtnX = (GAME.W - 180) / 2;
+    rc.save();
+    rc.shadowBlur  = 12;
     rc.shadowColor = '#ff00ff';
-    rc.fillStyle = 'rgba(255,0,255,0.18)';
+    rc.fillStyle   = 'rgba(255,0,255,0.18)';
     rc.strokeStyle = '#ff00ff';
-    rc.lineWidth = 1.5;
+    rc.lineWidth   = 1.5;
     rc.beginPath();
-    rc.roundRect(shopBtnX, shopBtnY, shopBtnW, shopBtnH, 8);
+    rc.roundRect(retryBtnX, retryBtnY, 180, 40, 8);
     rc.fill();
     rc.stroke();
-    rc.shadowBlur = 6;
-    rc.font = 'bold 14px Orbitron,monospace';
-    rc.fillStyle = '#ff00ff';
-    rc.fillText('\u25b6  JACK IN  //  SHOP', GAME.W / 2, shopBtnY + shopBtnH / 2);
+    rc.font         = 'bold 13px Orbitron,monospace';
+    rc.textAlign    = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle    = '#ff00ff';
+    rc.shadowBlur   = 5;
+    rc.fillText('\u21ba  RETRY', GAME.W / 2, retryBtnY + 20);
+    rc.restore();
 
-    // MENU button
-    const menuX = (GAME.W - 140) / 2, menuY = GAME.H / 2 + 136, menuW = 140, menuH = 32;
-    rc.shadowBlur = 8;
+    const menuBtnY = retryBtnY + 52;
+    const menuBtnX = (GAME.W - 130) / 2;
+    rc.save();
+    rc.shadowBlur  = 6;
     rc.shadowColor = '#00ffff';
-    rc.fillStyle = 'rgba(0,255,255,0.10)';
-    rc.strokeStyle = 'rgba(0,255,255,0.55)';
-    rc.lineWidth = 1;
+    rc.fillStyle   = 'rgba(0,255,255,0.10)';
+    rc.strokeStyle = 'rgba(0,255,255,0.5)';
+    rc.lineWidth   = 1;
     rc.beginPath();
-    rc.roundRect(menuX, menuY, menuW, menuH, 6);
+    rc.roundRect(menuBtnX, menuBtnY, 130, 32, 6);
     rc.fill();
     rc.stroke();
-    rc.shadowBlur = 0;
-    rc.font = 'bold 11px Orbitron,monospace';
-    rc.fillStyle = 'rgba(0,255,255,0.8)';
-    rc.fillText('MENU', GAME.W / 2, menuY + menuH / 2);
+    rc.font         = 'bold 11px Orbitron,monospace';
+    rc.textAlign    = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle    = 'rgba(0,255,255,0.8)';
+    rc.shadowBlur   = 0;
+    rc.fillText('MENU', GAME.W / 2, menuBtnY + 16);
+    rc.restore();
 
     // Keyboard hints
-    rc.font = '400 9px Orbitron,monospace';
-    rc.fillStyle = 'rgba(255,255,255,0.25)';
-    rc.fillText('R / ENTER \u2192 SHOP   \u2022   ESC \u2192 MENU', GAME.W / 2, GAME.H / 2 + 186);
+    rc.save();
+    rc.font      = '400 9px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.22)';
+    rc.fillText('R / ENTER \u2192 RETRY   \u2022   ESC \u2192 MENU', GAME.W / 2, menuBtnY + 52);
+    rc.restore();
 
     rc.restore();
   }
