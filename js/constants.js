@@ -11,15 +11,18 @@ export const GAME = {
   LANE_W: 390 / 4,               // 97.5 px
   NOTE_W: 85.5,                  // LANE_W - 12
   NOTE_H: 28,
-  HIT_Y: 714,                    // hit-line Y
+  HIT_Y: 714,                    // default hit-line Y (overridden by gameState.hitY)
   SPAWN_Y: -32,                  // -NOTE_H - 4
   LEAD_BEATS: 3,
   LEAD_MS: 3 * (60000 / 128),    // 1406.25 ms
-  SPD: (714 - (-32)) / (3 * (60000 / 128)), // px/ms ≈ 0.5126
+  SPD: (714 - (-32)) / (3 * (60000 / 128)), // px/ms ≈ 0.5126 (reference only)
   PERF_WIN: 50,                  // ± ms perfect
   GOOD_WIN: 100,                 // ± ms good
   NOTE_SHAPE: 'rectangle',       // 'rectangle' | 'circle'
+  JUDGMENT_LINE_Y: 0.82,         // default fraction of canvas height
 };
+
+export const NOTE_SPEED_LEVELS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 export const INPUT = {
   KEY_MAP_4: { d: 0, f: 1, j: 2, k: 3 },
@@ -41,7 +44,10 @@ export const GAME_STATES = {
   PLAYING: 'PLAYING',
   GAMEOVER: 'GAMEOVER',
   KEYBINDINGS: 'KEYBINDINGS',
+  SETTINGS: 'SETTINGS',
 };
+
+export const JUDGMENT_LINE_LEVELS = [0.70, 0.75, 0.80, 0.85, 0.90];
 
 export const TRACKS = [
   { title: 'Neon Fury',                 artist: 'Neura-Flow',        vibe: 'AGGRESSIVE',  file: 'neon_fury.mp3' },

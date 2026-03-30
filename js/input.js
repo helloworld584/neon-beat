@@ -2,7 +2,7 @@
 // NEON BEAT – Input Handler
 // ================================================================
 
-import { GAME, INPUT, GAME_STATES, TRACKS, SPEED_MULTIPLIERS } from './constants.js';
+import { GAME, INPUT, GAME_STATES, TRACKS, SPEED_MULTIPLIERS, NOTE_SPEED_LEVELS, JUDGMENT_LINE_LEVELS } from './constants.js';
 import { gameState } from './state.js';
 import { musicPlayer } from './music.js';
 import { releaseLane } from './game.js';
@@ -57,6 +57,11 @@ export class InputHandler {
       return;
     }
 
+    if (gameState.gameState === GAME_STATES.SETTINGS) {
+      this._handleSettingsKey(e.key);
+      return;
+    }
+
     if (gameState.gameState === GAME_STATES.TITLE) {
       if (e.key.toLowerCase() === 's') {
         gameState.noteShape = gameState.noteShape === 'circle' ? 'rectangle' : 'circle';
@@ -87,8 +92,8 @@ export class InputHandler {
     }
 
     if (gameState.gameState === GAME_STATES.PLAYING) {
-      if (e.key === '[') { gameState.chartOffset -= 10; gameState.startTime -= 10; return; }
-      if (e.key === ']') { gameState.chartOffset += 10; gameState.startTime += 10; return; }
+      if (e.key === '[') { this._changeNoteSpeed(-1); return; }
+      if (e.key === ']') { this._changeNoteSpeed(+1); return; }
     }
 
     if (gameState.gameState === GAME_STATES.GAMEOVER) {
@@ -159,6 +164,31 @@ export class InputHandler {
     }
   }
 
+  _handleSettingsKey(key) {
+    switch (key) {
+      case 'Escape': gameState.gameState = GAME_STATES.MUSIC_SELECT; break;
+      case '[':      this._changeNoteSpeed(-1); break;
+      case ']':      this._changeNoteSpeed(+1); break;
+      case ',':      this._changeJudgmentLine(-1); break;
+      case '.':      this._changeJudgmentLine(+1); break;
+      case 'ArrowLeft':  this._changeNoteSpeed(-1); break;
+      case 'ArrowRight': this._changeNoteSpeed(+1); break;
+    }
+  }
+
+  _changeNoteSpeed(dir) {
+    gameState.noteSpeedIdx = Math.max(0, Math.min(NOTE_SPEED_LEVELS.length - 1, gameState.noteSpeedIdx + dir));
+    gameState.saveNoteSpeed();
+    gameState.noteSpeedChangeT = 1500;
+  }
+
+  _changeJudgmentLine(dir) {
+    const cur = JUDGMENT_LINE_LEVELS.indexOf(gameState.judgmentLineY);
+    const next = Math.max(0, Math.min(JUDGMENT_LINE_LEVELS.length - 1, (cur === -1 ? 2 : cur) + dir));
+    gameState.judgmentLineY = JUDGMENT_LINE_LEVELS[next];
+    gameState.saveJudgmentLine();
+  }
+
   _handleEscConfirmKey(key) {
     if (key === 'y' || key === 'Y' || key === 'Enter') {
       gameState.escConfirm = false;
@@ -189,8 +219,11 @@ export class InputHandler {
         gameState.speedMultiplierIdx =
           (gameState.speedMultiplierIdx + 1) % SPEED_MULTIPLIERS.length;
         break;
-      case '[': gameState.chartOffset -= 10; break;
-      case ']': gameState.chartOffset += 10; break;
+      case '[': this._changeNoteSpeed(-1); break;
+      case ']': this._changeNoteSpeed(+1); break;
+      case ',': this._changeJudgmentLine(-1); break;
+      case '.': this._changeJudgmentLine(+1); break;
+      case 't': case 'T': gameState.gameState = GAME_STATES.SETTINGS; break;
       case 'Enter': this._enterShopFromSelect(); break;
       case 'Escape':
         musicPlayer.stopPreview();
@@ -324,6 +357,36 @@ export class InputHandler {
       return;
     }
 
+    // Settings screen touch handling
+    if (gameState.gameState === GAME_STATES.SETTINGS) {
+      // BACK (top-left)
+      if (ty <= 70 && tx <= 100) { gameState.gameState = GAME_STATES.MUSIC_SELECT; return; }
+      // NOTE SPEED pills: rowY=210, pillsY=224, pillH=28, 6 pills centered
+      const nsLevels = NOTE_SPEED_LEVELS.length;
+      const nsPillW = 56, nsPillH = 28, nsPillGap = 6;
+      const nsTotalW = nsLevels * nsPillW + (nsLevels - 1) * nsPillGap;
+      const nsStartX = (GAME.W - nsTotalW) / 2;
+      for (let i = 0; i < nsLevels; i++) {
+        const ox = nsStartX + i * (nsPillW + nsPillGap);
+        if (tx >= ox && tx < ox + nsPillW && ty >= 224 && ty < 224 + nsPillH) {
+          gameState.noteSpeedIdx = i; gameState.saveNoteSpeed();
+          gameState.noteSpeedChangeT = 1500; return;
+        }
+      }
+      // JUDGMENT LINE pills: rowY=310, pillsY=324, pillH=28
+      const jlLevels = JUDGMENT_LINE_LEVELS.length;
+      const jlPillW = 56, jlPillH = 28, jlPillGap = 6;
+      const jlTotalW = jlLevels * jlPillW + (jlLevels - 1) * jlPillGap;
+      const jlStartX = (GAME.W - jlTotalW) / 2;
+      for (let i = 0; i < jlLevels; i++) {
+        const ox = jlStartX + i * (jlPillW + jlPillGap);
+        if (tx >= ox && tx < ox + jlPillW && ty >= 324 && ty < 324 + jlPillH) {
+          gameState.judgmentLineY = JUDGMENT_LINE_LEVELS[i]; gameState.saveJudgmentLine(); return;
+        }
+      }
+      return;
+    }
+
     // Key bindings screen touch handling
     if (gameState.gameState === GAME_STATES.KEYBINDINGS) {
       // BACK button (top-left)
@@ -428,6 +491,16 @@ export class InputHandler {
         gameState.speedMultiplierIdx = i;
         return;
       }
+    }
+
+    // SETTINGS button — matches renderer settingsBtnY = selectorY+14+optH+14
+    // selectorY = MS.SEL_Y = 671, optH = 26 → settingsBtnY = 671+14+26+14 = 725
+    const settingsBtnY = 725, settingsBtnH = 28;
+    const settingsBtnW = 160, settingsBtnX = (GAME.W - settingsBtnW) / 2;
+    if (tx >= settingsBtnX && tx < settingsBtnX + settingsBtnW &&
+        ty >= settingsBtnY && ty < settingsBtnY + settingsBtnH) {
+      gameState.gameState = GAME_STATES.SETTINGS;
+      return;
     }
 
     // START button (below panel)

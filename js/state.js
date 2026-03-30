@@ -2,7 +2,7 @@
 // NEON BEAT – Game State Manager
 // ================================================================
 
-import { GAME, GAME_STATES, SHOP_ITEMS } from './constants.js';
+import { GAME, GAME_STATES, SHOP_ITEMS, NOTE_SPEED_LEVELS, JUDGMENT_LINE_LEVELS } from './constants.js';
 import { makeChart } from './chart.js';
 
 class GameState {
@@ -15,6 +15,12 @@ class GameState {
     this.shopCursor  = 0;   // selected shop card (0-2)
     // Note shape ('rectangle' | 'circle'), persisted
     this.noteShape = localStorage.getItem('neonbeat_note_shape') || 'rectangle';
+    // Note speed index into NOTE_SPEED_LEVELS, persisted
+    this.noteSpeedIdx = parseInt(localStorage.getItem('neonbeat_note_speed_idx') || '2', 10);
+    this.noteSpeedChangeT = 0;  // HUD flash timer (ms)
+    // Judgment line position as fraction of canvas height, persisted
+    const savedJL = parseFloat(localStorage.getItem('neonbeat_judgment_line_y'));
+    this.judgmentLineY = JUDGMENT_LINE_LEVELS.includes(savedJL) ? savedJL : GAME.JUDGMENT_LINE_Y;
     // Key bindings: { [laneIndex]: 'key_char' }, persisted
     this.keyBindings = (() => {
       try { return JSON.parse(localStorage.getItem('neonbeat_keybindings')) || null; }
@@ -29,6 +35,11 @@ class GameState {
   get laneW()     { return GAME.W / this.laneCount; }
   get noteW()     { return this.laneW - 12; }
 
+  // ── Dynamic judgment line & note speed ───────────────────────────
+  get hitY()     { return Math.round(GAME.H * this.judgmentLineY); }
+  get baseSpd()  { return (this.hitY - GAME.SPAWN_Y) / GAME.LEAD_MS; }
+  get noteSpeed(){ return NOTE_SPEED_LEVELS[this.noteSpeedIdx] ?? 1.0; }
+
   hasModifier(id) { return this.currentRun.modifiers.includes(id); }
 
   saveCredits() {
@@ -37,6 +48,14 @@ class GameState {
 
   saveNoteShape() {
     localStorage.setItem('neonbeat_note_shape', this.noteShape);
+  }
+
+  saveNoteSpeed() {
+    localStorage.setItem('neonbeat_note_speed_idx', String(this.noteSpeedIdx));
+  }
+
+  saveJudgmentLine() {
+    localStorage.setItem('neonbeat_judgment_line_y', String(this.judgmentLineY));
   }
 
   saveKeyBindings() {
@@ -156,8 +175,9 @@ class GameState {
       this.keyFlash[i] = Math.max(0, this.keyFlash[i] - dt);
     }
 
-    this.judgeT     = Math.max(0, this.judgeT     - dt);
-    this.glitchT    = Math.max(0, this.glitchT    - dt);
+    this.judgeT          = Math.max(0, this.judgeT          - dt);
+    this.glitchT         = Math.max(0, this.glitchT         - dt);
+    this.noteSpeedChangeT = Math.max(0, this.noteSpeedChangeT - dt);
     this.trackNameT = Math.max(0, this.trackNameT - dt);
     this.effects    = this.effects.filter(e => (e.t -= dt) > 0);
   }

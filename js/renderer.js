@@ -2,7 +2,7 @@
 // NEON BEAT – Rendering System
 // ================================================================
 
-import { GAME, INPUT, VISUAL, GAME_STATES, TRACKS, VIBE_COLORS, SPEED_MULTIPLIERS, SHOP_ITEMS } from './constants.js';
+import { GAME, INPUT, VISUAL, GAME_STATES, TRACKS, VIBE_COLORS, SPEED_MULTIPLIERS, SHOP_ITEMS, NOTE_SPEED_LEVELS, JUDGMENT_LINE_LEVELS } from './constants.js';
 import { getImage } from './assets.js';
 import { gameState } from './state.js';
 import { musicPlayer } from './music.js';
@@ -29,6 +29,9 @@ export class Renderer {
       this.drawScanlines(this.offCtx);
     } else if (gameState.gameState === GAME_STATES.KEYBINDINGS) {
       this.renderKeyBindings(this.offCtx);
+      this.drawScanlines(this.offCtx);
+    } else if (gameState.gameState === GAME_STATES.SETTINGS) {
+      this.renderSettings(this.offCtx);
       this.drawScanlines(this.offCtx);
     } else {
       this.drawScrollBG(this.offCtx);
@@ -109,9 +112,15 @@ export class Renderer {
     const lw = gameState.laneW;
     rc.save();
 
-    // Dividers
+    // Dividers — subtle dark lines between lanes
     for (let i = 1; i < lc; i++) {
-      rc.strokeStyle = 'rgba(255,255,255,0.06)';
+      rc.strokeStyle = 'rgba(0,0,0,0.55)';
+      rc.lineWidth = 2;
+      rc.beginPath();
+      rc.moveTo(i * lw, 0);
+      rc.lineTo(i * lw, GAME.H);
+      rc.stroke();
+      rc.strokeStyle = 'rgba(255,255,255,0.12)';
       rc.lineWidth = 1;
       rc.beginPath();
       rc.moveTo(i * lw, 0);
@@ -133,15 +142,23 @@ export class Renderer {
 
   drawHitZone(rc) {
     rc.save();
-    
-    // Glow line
-    rc.shadowBlur = 18;
-    rc.shadowColor = 'rgba(255,255,255,0.9)';
-    rc.strokeStyle = 'rgba(255,255,255,0.5)';
-    rc.lineWidth = 2;
+    const hitY = gameState.hitY;
+
+    // Solid neon judgment line
+    rc.shadowBlur = 16;
+    rc.shadowColor = '#00ffff';
+    rc.strokeStyle = '#00ffff';
+    rc.lineWidth = 3;
     rc.beginPath();
-    rc.moveTo(0, GAME.HIT_Y);
-    rc.lineTo(GAME.W, GAME.HIT_Y);
+    rc.moveTo(0, hitY);
+    rc.lineTo(GAME.W, hitY);
+    rc.stroke();
+    rc.shadowBlur = 6;
+    rc.strokeStyle = 'rgba(255,255,255,0.75)';
+    rc.lineWidth = 1;
+    rc.beginPath();
+    rc.moveTo(0, hitY);
+    rc.lineTo(GAME.W, hitY);
     rc.stroke();
 
     // Per-lane circles
@@ -157,19 +174,19 @@ export class Renderer {
       rc.strokeStyle = col;
       rc.lineWidth = pressed ? 3 : 1.5;
       rc.beginPath();
-      rc.arc(cx, GAME.HIT_Y, lw / 2 - 12, 0, Math.PI * 2);
+      rc.arc(cx, hitY, lw / 2 - 12, 0, Math.PI * 2);
       rc.stroke();
 
       if (pressed) {
         rc.globalAlpha = 0.22;
         rc.fillStyle = col;
         rc.beginPath();
-        rc.arc(cx, GAME.HIT_Y, lw / 2 - 12, 0, Math.PI * 2);
+        rc.arc(cx, hitY, lw / 2 - 12, 0, Math.PI * 2);
         rc.fill();
         rc.globalAlpha = 1;
       }
     }
-    
+
     rc.restore();
   }
 
@@ -177,7 +194,7 @@ export class Renderer {
     const noteCyan    = getImage('note_cyan');
     const noteMagenta = getImage('note_magenta');
     const overclock   = gameState.hasModifier('overclock') ? 1.2 : 1.0;
-    const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * overclock;
+    const spd = gameState.baseSpd * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * gameState.noteSpeed * overclock;
     const ghostNotes  = gameState.hasModifier('ghost_notes');
     const lw = gameState.laneW;
     const nw = gameState.noteW;
@@ -193,7 +210,7 @@ export class Renderer {
     // Second pass: note caps (tap + hold head)
     for (const note of gameState.notes) {
       if (note.state !== 'active') continue;
-      if (note.y < GAME.SPAWN_Y - 10 || note.y > GAME.HIT_Y + 60) continue;
+      if (note.y < GAME.SPAWN_Y - 10 || note.y > gameState.hitY + 60) continue;
 
       const x   = note.lane * lw + (lw - nw) / 2;
       const y   = note.y - GAME.NOTE_H / 2;
@@ -202,13 +219,13 @@ export class Renderer {
       // ghost_notes: fade out as the note approaches the hit zone
       let alpha = 1;
       if (ghostNotes) {
-        const dist = Math.max(0, GAME.HIT_Y - note.y);
-        alpha = Math.min(1, dist / (GAME.HIT_Y * 0.5));
+        const dist = Math.max(0, gameState.hitY - note.y);
+        alpha = Math.min(1, dist / (gameState.hitY * 0.5));
       }
 
       rc.save();
       rc.globalAlpha = alpha;
-      rc.shadowBlur  = 20;
+      rc.shadowBlur  = 24;
       rc.shadowColor = col;
 
       if (gameState.noteShape === 'circle') {
@@ -265,7 +282,7 @@ export class Renderer {
 
       // Body rect (clamped to screen, clipped at HIT_Y since head-passed portion is "past")
       const drawTop = Math.max(0, tailY);
-      const drawBot = Math.min(GAME.HIT_Y + GAME.NOTE_H / 2, Math.min(GAME.H, headY));
+      const drawBot = Math.min(gameState.hitY + GAME.NOTE_H / 2, Math.min(GAME.H, headY));
       if (drawBot > drawTop) {
         rc.fillStyle = `rgba(${fillRgb},0.18)`;
         rc.fillRect(bodyX, drawTop, bodyW, drawBot - drawTop);
@@ -304,7 +321,7 @@ export class Renderer {
       const remainingPx = remaining * spd;
 
       if (remainingPx > 4) {
-        const topY = GAME.HIT_Y - remainingPx;
+        const topY = gameState.hitY - remainingPx;
 
         // Shrinking body above hit line
         rc.fillStyle = `rgba(${fillRgb},0.28)`;
@@ -395,7 +412,7 @@ export class Renderer {
   drawKeyButtons(rc) {
     const lc      = gameState.laneCount;
     const lw      = gameState.laneW;
-    const buttonY = GAME.HIT_Y + 58;
+    const buttonY = gameState.hitY + 58;
     const size    = Math.min(40, lw - 10);
 
     for (let i = 0; i < lc; i++) {
@@ -436,8 +453,8 @@ export class Renderer {
     rc.shadowColor = '#00ffff';
     rc.fillText(gameState.score.toString().padStart(8, '0'), GAME.W - 14, 18);
     
-    rc.font = '400 9px Orbitron,monospace';
-    rc.fillStyle = 'rgba(255,255,255,0.4)';
+    rc.font = '400 11px Orbitron,monospace';
+    rc.fillStyle = 'rgba(255,255,255,0.65)';
     rc.shadowBlur = 0;
     rc.fillText('SCORE', GAME.W - 14, 48);
 
@@ -448,7 +465,7 @@ export class Renderer {
       else if (gameState.combo >= 25) comboColor = '#ffff00';
       else if (gameState.combo >= 10) comboColor = '#00ffff';
       else comboColor = '#ffffff';
-      
+
       const comboSize = Math.min(50, 28 + Math.sqrt(gameState.combo) * 1.8) | 0;
       rc.textAlign = 'left';
       rc.font = `900 ${comboSize}px Orbitron,monospace`;
@@ -456,20 +473,34 @@ export class Renderer {
       rc.shadowBlur = 16;
       rc.shadowColor = comboColor;
       rc.fillText(`${gameState.combo}×`, 14, 16);
-      
-      rc.font = '400 9px Orbitron,monospace';
-      rc.fillStyle = 'rgba(255,255,255,0.4)';
+
+      rc.font = '400 11px Orbitron,monospace';
+      rc.fillStyle = 'rgba(255,255,255,0.65)';
       rc.shadowBlur = 0;
       rc.fillText('COMBO', 14, 16 + comboSize + 4);
     }
-    
+
+    // NOTE SPEED flash (top-left, shown 1.5s after change)
+    if (gameState.noteSpeedChangeT > 0) {
+      const alpha = Math.min(1, gameState.noteSpeedChangeT / 300);
+      rc.save();
+      rc.globalAlpha = alpha;
+      rc.textAlign = 'left';
+      rc.font = 'bold 18px Orbitron,monospace';
+      rc.fillStyle = '#ffcc00';
+      rc.shadowBlur = 14;
+      rc.shadowColor = '#ffcc00';
+      rc.fillText(`SPEED  ${NOTE_SPEED_LEVELS[gameState.noteSpeedIdx]}×`, 14, gameState.combo > 1 ? 90 : 18);
+      rc.restore();
+    }
+
     rc.restore();
   }
 
   drawJudgment(rc) {
     if (!gameState.judgeText || gameState.judgeT <= 0) return;
     
-    const t = gameState.judgeT / 550;
+    const t = gameState.judgeT / 600;
     let color, glow;
     
     if (gameState.judgeText === 'PERFECT') {
@@ -485,9 +516,9 @@ export class Renderer {
     
     rc.save();
     rc.globalAlpha = Math.min(1, t * 2);
-    rc.translate(GAME.W / 2, GAME.HIT_Y - 86);
+    rc.translate(GAME.W / 2, gameState.hitY - 86);
     rc.scale(1 + 0.04 * (1 - t), 1 + 0.04 * (1 - t));
-    rc.font = '900 21px Orbitron,monospace';
+    rc.font = '900 32px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
     rc.fillStyle = color;
@@ -536,11 +567,11 @@ export class Renderer {
 
     rc.save();
 
-    // Track title — top-left, 11px gray
-    rc.font = '400 11px Orbitron,monospace';
+    // Track title — top-left
+    rc.font = '400 12px Orbitron,monospace';
     rc.textAlign = 'left';
     rc.textBaseline = 'bottom';
-    rc.fillStyle = '#888888';
+    rc.fillStyle = 'rgba(255,255,255,0.65)';
     rc.fillText(track ? track.title.toUpperCase() : '', barX, barY - 2);
 
     // Progress bar background
@@ -669,17 +700,17 @@ export class Renderer {
     }
     
     // Subtitle
-    rc.font = '400 10px Orbitron,monospace';
+    rc.font = '400 12px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
-    rc.fillStyle = 'rgba(0,255,255,0.5)';
+    rc.fillStyle = 'rgba(0,255,255,0.75)';
     rc.shadowBlur = 0;
     rc.fillText('CYBERPUNK RHYTHM GAME  ♦  128 BPM', GAME.W / 2, 432);
-    
+
     // Blink prompt — show actual bound keys
     if (Math.sin(gameState.pulse * Math.PI * 2 * 1.2) > 0) {
       const startKeys = [0, 1, 2, 3].map(i => gameState.getKeyLabel(i)).join(' / ');
-      rc.font = 'bold 12px Orbitron,monospace';
+      rc.font = 'bold 14px Orbitron,monospace';
       rc.fillStyle = '#fff';
       rc.shadowBlur = 10;
       rc.shadowColor = '#fff';
@@ -718,7 +749,7 @@ export class Renderer {
     // NOTE SHAPE toggle
     const shapeLabel = `NOTE: ${gameState.noteShape === 'circle' ? '\u25cf CIRCLE' : '\u25a0 RECT'}`;
     rc.save();
-    rc.font = 'bold 9px Orbitron,monospace';
+    rc.font = 'bold 10px Orbitron,monospace';
     const shapeW = rc.measureText(shapeLabel).width + 20;
     const shapeX = GAME.W / 2 - shapeW - 6;
     rc.fillStyle  = 'rgba(0,255,255,0.10)';
@@ -738,7 +769,7 @@ export class Renderer {
     // KEYBINDS button
     const kbLabel = 'KEYBINDS';
     rc.save();
-    rc.font = 'bold 9px Orbitron,monospace';
+    rc.font = 'bold 10px Orbitron,monospace';
     const kbW = rc.measureText(kbLabel).width + 20;
     const kbX = GAME.W / 2 + 6;
     rc.fillStyle   = 'rgba(255,0,255,0.10)';
@@ -757,10 +788,10 @@ export class Renderer {
 
     // Hint below buttons
     rc.save();
-    rc.font = '400 8px Orbitron,monospace';
+    rc.font = '400 9px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
-    rc.fillStyle = 'rgba(255,255,255,0.22)';
+    rc.fillStyle = 'rgba(255,255,255,0.45)';
     rc.fillText('S \u2192 NOTE SHAPE   \u2022   K \u2192 KEYBINDS', GAME.W / 2, btnY + btnH + 10);
     rc.restore();
   }
@@ -780,20 +811,20 @@ export class Renderer {
     rc.font = 'bold 9px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
-    rc.fillStyle = gameState.isMuted ? '#ff6666' : 'rgba(255,255,255,0.55)';
+    rc.fillStyle = gameState.isMuted ? '#ff6666' : 'rgba(255,255,255,0.85)';
     rc.fillText(gameState.isMuted ? '\u266a OFF' : '\u266a  ON', mx + mw / 2, my + mh / 2);
 
     // Menu / back button (top-right, touch-friendly)
     const bx = 332, by = 8, bw = 50, bh = 24;
     rc.fillStyle = 'rgba(0,0,0,0.55)';
-    rc.strokeStyle = 'rgba(255,255,255,0.25)';
+    rc.strokeStyle = 'rgba(255,255,255,0.40)';
     rc.lineWidth = 1;
     rc.shadowBlur = 0;
     rc.beginPath();
     rc.roundRect(bx, by, bw, bh, 5);
     rc.fill();
     rc.stroke();
-    rc.fillStyle = 'rgba(255,255,255,0.55)';
+    rc.fillStyle = 'rgba(255,255,255,0.85)';
     rc.fillText('MENU', bx + bw / 2, by + bh / 2);
 
     rc.restore();
@@ -945,10 +976,10 @@ export class Renderer {
 
       // Track number
       rc.save();
-      rc.font = `bold 10px Orbitron,monospace`;
+      rc.font = `bold 11px Orbitron,monospace`;
       rc.textAlign = 'left';
       rc.textBaseline = 'middle';
-      rc.fillStyle = sel ? '#00ffff' : 'rgba(255,255,255,0.28)';
+      rc.fillStyle = sel ? '#00ffff' : 'rgba(255,255,255,0.55)';
       rc.shadowBlur = sel ? 5 : 0;
       rc.shadowColor = '#00ffff';
       rc.fillText(`${i + 1}.`, cardX + 14, lineA);
@@ -967,16 +998,16 @@ export class Renderer {
 
       // Artist
       rc.save();
-      rc.font = `400 10px Orbitron,monospace`;
+      rc.font = `400 11px Orbitron,monospace`;
       rc.textAlign = 'left';
       rc.textBaseline = 'middle';
-      rc.fillStyle = 'rgba(255,255,255,0.38)';
+      rc.fillStyle = 'rgba(255,255,255,0.62)';
       rc.fillText(track.artist, cardX + 38, lineB);
       rc.restore();
 
       // Vibe pill (top-right of card)
       rc.save();
-      rc.font = 'bold 9px Orbitron,monospace';
+      rc.font = 'bold 10px Orbitron,monospace';
       rc.textBaseline = 'middle';
       rc.textAlign = 'center';
       const vibeW = rc.measureText(track.vibe).width + 14;
@@ -999,10 +1030,10 @@ export class Renderer {
       // Preview hint (selected card only)
       if (sel) {
         rc.save();
-        rc.font = '400 9px Orbitron,monospace';
+        rc.font = '400 10px Orbitron,monospace';
         rc.textAlign = 'right';
         rc.textBaseline = 'middle';
-        rc.fillStyle = 'rgba(255,255,255,0.32)';
+        rc.fillStyle = 'rgba(255,255,255,0.55)';
         rc.fillText('\u25b6 SPACE', cardX + cardW - 10, lineB);
         rc.restore();
       }
@@ -1012,10 +1043,10 @@ export class Renderer {
     const selectorY = startY + TRACKS.length * cardH + 16;
 
     rc.save();
-    rc.font = 'bold 10px Orbitron,monospace';
+    rc.font = 'bold 11px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
-    rc.fillStyle = 'rgba(255,255,255,0.38)';
+    rc.fillStyle = 'rgba(255,255,255,0.62)';
     rc.fillText('FALL SPEED', GAME.W / 2, selectorY);
 
     const optW = 58, optH = 26, optGap = 8;
@@ -1036,7 +1067,7 @@ export class Renderer {
       rc.fill();
       rc.stroke();
       rc.shadowBlur = 0;
-      rc.fillStyle = active ? '#00ffff' : 'rgba(255,255,255,0.42)';
+      rc.fillStyle = active ? '#00ffff' : 'rgba(255,255,255,0.65)';
       rc.fillText(`${SPEED_MULTIPLIERS[i]}x`, ox + optW / 2, oy + optH / 2);
     }
 
@@ -1046,31 +1077,33 @@ export class Renderer {
     rc.fillText('\u2192', optStartX + totalW + 14, selectorY + 14 + optH / 2);
     rc.restore();
 
-    // ── Chart offset display ──────────────────────────────────────
-    const offsetY = selectorY + 14 + optH + 16;
+    // ── SETTINGS button ───────────────────────────────────────────
+    const settingsBtnY = selectorY + 14 + optH + 14;
+    const settingsBtnW = 160, settingsBtnH = 28;
+    const settingsBtnX = (GAME.W - settingsBtnW) / 2;
     rc.save();
+    rc.fillStyle = 'rgba(255,0,255,0.10)';
+    rc.strokeStyle = 'rgba(255,0,255,0.55)';
+    rc.lineWidth = 1;
+    rc.shadowBlur = 0;
+    rc.beginPath();
+    rc.roundRect(settingsBtnX, settingsBtnY, settingsBtnW, settingsBtnH, 6);
+    rc.fill();
+    rc.stroke();
     rc.font = 'bold 10px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
-    const off = gameState.chartOffset;
-    const offStr = off === 0 ? 'OFFSET  0 ms' : `OFFSET  ${off > 0 ? '+' : ''}${off} ms`;
-    rc.fillStyle = off !== 0 ? '#ffcc00' : 'rgba(255,255,255,0.28)';
-    rc.shadowBlur = off !== 0 ? 6 : 0;
-    rc.shadowColor = '#ffcc00';
-    rc.fillText(offStr, GAME.W / 2, offsetY);
-    rc.font = '400 8px Orbitron,monospace';
-    rc.fillStyle = 'rgba(255,255,255,0.2)';
-    rc.shadowBlur = 0;
-    rc.fillText('[ \u2212 10ms       ] + 10ms', GAME.W / 2, offsetY + 14);
+    rc.fillStyle = '#ff88ff';
+    rc.fillText('\u2699  SETTINGS', GAME.W / 2, settingsBtnY + settingsBtnH / 2);
     rc.restore();
 
     // ── Footer hints ──────────────────────────────────────────────
     rc.save();
-    rc.font = '400 9px Orbitron,monospace';
+    rc.font = '400 10px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
-    rc.fillStyle = 'rgba(255,255,255,0.28)';
-    rc.fillText('\u2191\u2193 NAVIGATE  \u2022  \u2190\u2192 SPEED  \u2022  [ ] OFFSET',
+    rc.fillStyle = 'rgba(255,255,255,0.50)';
+    rc.fillText('\u2191\u2193 NAVIGATE  \u2022  \u2190\u2192 SPEED  \u2022  T SETTINGS',
       GAME.W / 2, py + ph - 32);
     rc.fillText('ENTER/TAP\u00d72 SELECT  \u2022  SPACE PREVIEW  \u2022  ESC BACK',
       GAME.W / 2, py + ph - 16);
@@ -1078,10 +1111,10 @@ export class Renderer {
 
     // ── BACK button (above panel, top-left) ───────────────────────
     rc.save();
-    rc.font = 'bold 10px Orbitron,monospace';
+    rc.font = 'bold 11px Orbitron,monospace';
     rc.textAlign = 'left';
     rc.textBaseline = 'middle';
-    rc.fillStyle = 'rgba(255,255,255,0.38)';
+    rc.fillStyle = 'rgba(255,255,255,0.65)';
     rc.shadowBlur = 0;
     rc.fillText('\u2190 BACK', px + 4, py - 18);
     rc.restore();
@@ -1151,10 +1184,10 @@ export class Renderer {
     const track = TRACKS[gameState.selectedTrack];
     if (track) {
       rc.save();
-      rc.font = '400 9px Orbitron,monospace';
+      rc.font = '400 11px Orbitron,monospace';
       rc.textAlign = 'center';
       rc.textBaseline = 'middle';
-      rc.fillStyle = 'rgba(255,255,255,0.30)';
+      rc.fillStyle = 'rgba(255,255,255,0.55)';
       rc.fillText(`\u266a  ${track.title.toUpperCase()}`, GAME.W / 2, 76);
       rc.restore();
     }
@@ -1202,7 +1235,7 @@ export class Renderer {
 
       // Item name
       rc.save();
-      rc.font = 'bold 10px Orbitron,monospace';
+      rc.font = 'bold 11px Orbitron,monospace';
       rc.textAlign = 'center';
       rc.textBaseline = 'top';
       rc.fillStyle = sel ? '#ff88ff' : 'rgba(255,255,255,0.85)';
@@ -1220,10 +1253,10 @@ export class Renderer {
 
       // Description
       rc.save();
-      rc.font = '400 8px Orbitron,monospace';
+      rc.font = '400 9px Orbitron,monospace';
       rc.textAlign = 'center';
       rc.textBaseline = 'top';
-      rc.fillStyle = 'rgba(255,255,255,0.45)';
+      rc.fillStyle = 'rgba(255,255,255,0.70)';
       // Split desc at '/' for two lines
       const parts = item.desc.split('/');
       parts.forEach((p, idx) => {
@@ -1291,17 +1324,17 @@ export class Renderer {
     if (mods.length > 0) {
       const rowY = cardY + cardH + 16;
       rc.save();
-      rc.font = '400 8px Orbitron,monospace';
+      rc.font = '400 10px Orbitron,monospace';
       rc.textAlign = 'center';
       rc.textBaseline = 'middle';
-      rc.fillStyle = 'rgba(255,255,255,0.30)';
+      rc.fillStyle = 'rgba(255,255,255,0.55)';
       rc.fillText('ACTIVE MODS', GAME.W / 2, rowY);
       let pillX = 16;
       const pillY = rowY + 14;
       for (const id of mods) {
         const item = SHOP_ITEMS.find(s => s.id === id);
         const label = item ? item.name : id.toUpperCase();
-        rc.font = 'bold 8px Orbitron,monospace';
+        rc.font = 'bold 9px Orbitron,monospace';
         const pw = rc.measureText(label).width + 12;
         rc.fillStyle = 'rgba(255,0,255,0.18)';
         rc.strokeStyle = 'rgba(255,0,255,0.6)';
@@ -1342,10 +1375,10 @@ export class Renderer {
 
     // Keyboard hints
     rc.save();
-    rc.font = '400 9px Orbitron,monospace';
+    rc.font = '400 10px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
-    rc.fillStyle = 'rgba(255,255,255,0.22)';
+    rc.fillStyle = 'rgba(255,255,255,0.50)';
     rc.fillText('\u2190\u2192 SELECT   \u2022   ENTER BUY   \u2022   S / TAP START', GAME.W / 2, 820);
     rc.restore();
   }
@@ -1442,15 +1475,136 @@ export class Renderer {
 
     // Hint text
     rc.save();
-    rc.font = '400 9px Orbitron,monospace';
+    rc.font = '400 10px Orbitron,monospace';
     rc.textAlign    = 'center';
     rc.textBaseline = 'middle';
-    rc.fillStyle    = 'rgba(255,255,255,0.30)';
+    rc.fillStyle    = 'rgba(255,255,255,0.55)';
     if (gameState.keybindingSlot >= 0) {
       rc.fillText('PRESS ANY KEY TO ASSIGN  \u2022  ESC TO CANCEL', GAME.W / 2, 550);
     } else {
       rc.fillText('\u2191\u2193 / TAP TO SELECT   \u2022   ENTER TO ASSIGN   \u2022   ESC BACK', GAME.W / 2, 550);
     }
+    rc.restore();
+  }
+
+  // ── Settings screen ───────────────────────────────────────────────
+  renderSettings(rc) {
+    rc.fillStyle = '#02000d';
+    rc.fillRect(0, 0, GAME.W, GAME.H);
+
+    // Back hint
+    rc.save();
+    rc.font = 'bold 11px Orbitron,monospace';
+    rc.textAlign = 'left';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.65)';
+    rc.fillText('\u2190 BACK', 20, 56);
+    rc.restore();
+
+    // Header
+    rc.save();
+    rc.font = '900 20px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = '#ff00ff';
+    rc.shadowBlur = 16;
+    rc.shadowColor = '#ff00ff';
+    rc.fillText('SETTINGS', GAME.W / 2, 148);
+    rc.restore();
+
+    // Divider
+    rc.save();
+    rc.strokeStyle = 'rgba(255,0,255,0.25)';
+    rc.lineWidth = 1;
+    rc.beginPath();
+    rc.moveTo(40, 172); rc.lineTo(GAME.W - 40, 172);
+    rc.stroke();
+    rc.restore();
+
+    const pillW = 56, pillH = 28, pillGap = 6;
+    const _drawPills = (label, levels, activeIdx, rowY) => {
+      rc.save();
+      rc.font = 'bold 11px Orbitron,monospace';
+      rc.textAlign = 'left';
+      rc.textBaseline = 'middle';
+      rc.fillStyle = 'rgba(255,255,255,0.75)';
+      rc.shadowBlur = 0;
+      rc.fillText(label, 24, rowY);
+
+      const totalW = levels.length * pillW + (levels.length - 1) * pillGap;
+      const startX = (GAME.W - totalW) / 2;
+      for (let i = 0; i < levels.length; i++) {
+        const active = i === activeIdx;
+        const ox = startX + i * (pillW + pillGap);
+        rc.fillStyle = active ? 'rgba(255,0,255,0.22)' : 'rgba(255,255,255,0.04)';
+        rc.strokeStyle = active ? '#ff00ff' : 'rgba(255,255,255,0.15)';
+        rc.lineWidth = active ? 1.5 : 1;
+        rc.shadowBlur = active ? 8 : 0;
+        rc.shadowColor = '#ff00ff';
+        rc.beginPath();
+        rc.roundRect(ox, rowY + 14, pillW, pillH, 5);
+        rc.fill();
+        rc.stroke();
+        rc.shadowBlur = 0;
+        rc.font = 'bold 11px Orbitron,monospace';
+        rc.textAlign = 'center';
+        rc.textBaseline = 'middle';
+        rc.fillStyle = active ? '#ff88ff' : 'rgba(255,255,255,0.60)';
+        rc.fillText(String(levels[i]), ox + pillW / 2, rowY + 14 + pillH / 2);
+      }
+      rc.restore();
+    };
+
+    // NOTE SPEED row
+    _drawPills(
+      'NOTE SPEED',
+      NOTE_SPEED_LEVELS.map(v => `${v}×`),
+      gameState.noteSpeedIdx,
+      210
+    );
+
+    // JUDGMENT LINE row
+    _drawPills(
+      'JUDGMENT LINE',
+      JUDGMENT_LINE_LEVELS.map(v => `${Math.round(v * 100)}%`),
+      JUDGMENT_LINE_LEVELS.indexOf(gameState.judgmentLineY),
+      310
+    );
+
+    // Live judgment line preview
+    rc.save();
+    const previewTop = 420, previewH = 120, previewX = 40, previewW = GAME.W - 80;
+    rc.font = '400 9px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.40)';
+    rc.fillText('PREVIEW', GAME.W / 2, previewTop - 10);
+    rc.fillStyle = 'rgba(255,255,255,0.04)';
+    rc.strokeStyle = 'rgba(255,255,255,0.10)';
+    rc.lineWidth = 1;
+    rc.beginPath();
+    rc.roundRect(previewX, previewTop, previewW, previewH, 4);
+    rc.fill();
+    rc.stroke();
+    // Scaled judgment line inside preview
+    const lineRelY = previewTop + previewH * gameState.judgmentLineY;
+    rc.shadowBlur = 10;
+    rc.shadowColor = '#00ffff';
+    rc.strokeStyle = '#00ffff';
+    rc.lineWidth = 2;
+    rc.beginPath();
+    rc.moveTo(previewX, lineRelY);
+    rc.lineTo(previewX + previewW, lineRelY);
+    rc.stroke();
+    rc.restore();
+
+    // Hints
+    rc.save();
+    rc.font = '400 10px Orbitron,monospace';
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.50)';
+    rc.fillText('\u2190\u2192 / TAP  \u2022  [ ] SPEED  \u2022  , . LINE  \u2022  ESC BACK', GAME.W / 2, 580);
     rc.restore();
   }
 
@@ -1523,8 +1677,8 @@ export class Renderer {
     // Track title
     const track = TRACKS[gameState.selectedTrack];
     if (track) {
-      rc.font = '400 10px Orbitron,monospace';
-      rc.fillStyle = 'rgba(255,255,255,0.45)';
+      rc.font = '400 12px Orbitron,monospace';
+      rc.fillStyle = 'rgba(255,255,255,0.70)';
       rc.shadowBlur = 0;
       rc.fillText(track.title.toUpperCase(), GAME.W / 2, 84);
     }
@@ -1557,10 +1711,10 @@ export class Renderer {
       rc.save();
 
       // Label
-      rc.font = 'bold 11px Orbitron,monospace';
+      rc.font = 'bold 13px Orbitron,monospace';
       rc.textAlign    = 'left';
       rc.textBaseline = 'middle';
-      rc.fillStyle    = 'rgba(255,255,255,0.55)';
+      rc.fillStyle    = 'rgba(255,255,255,0.80)';
       rc.shadowBlur   = 0;
       rc.fillText(label, labelX, cy);
 
@@ -1590,10 +1744,10 @@ export class Renderer {
     // ── Score (large) ────────────────────────────────────────────────
     const scoreY = rowStartY + rows.length * rowH + 28;
     rc.save();
-    rc.font = '400 10px Orbitron,monospace';
+    rc.font = '400 12px Orbitron,monospace';
     rc.textAlign    = 'center';
     rc.textBaseline = 'middle';
-    rc.fillStyle    = 'rgba(255,255,255,0.38)';
+    rc.fillStyle    = 'rgba(255,255,255,0.62)';
     rc.fillText('SCORE', GAME.W / 2, scoreY - 2);
     rc.font = 'bold 32px Orbitron,monospace';
     rc.fillStyle   = '#ffcc00';
@@ -1612,10 +1766,10 @@ export class Renderer {
 
     const gradeY = scoreY + 80;
     rc.save();
-    rc.font = '400 9px Orbitron,monospace';
+    rc.font = '400 12px Orbitron,monospace';
     rc.textAlign    = 'center';
     rc.textBaseline = 'middle';
-    rc.fillStyle    = 'rgba(255,255,255,0.35)';
+    rc.fillStyle    = 'rgba(255,255,255,0.62)';
     rc.fillText('GRADE', GAME.W / 2, gradeY - 2);
     rc.font = '900 52px Orbitron,monospace';
     rc.fillStyle   = gradeColor;
@@ -1677,10 +1831,10 @@ export class Renderer {
 
     // Keyboard hints
     rc.save();
-    rc.font      = '400 9px Orbitron,monospace';
+    rc.font      = '400 10px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
-    rc.fillStyle = 'rgba(255,255,255,0.22)';
+    rc.fillStyle = 'rgba(255,255,255,0.50)';
     rc.fillText('R / ENTER \u2192 RETRY   \u2022   ESC \u2192 MENU', GAME.W / 2, menuBtnY + 52);
     rc.restore();
 

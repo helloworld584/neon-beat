@@ -38,11 +38,11 @@ function applyScore(lane, grade) {
   gameState.credits += grade === 'PERFECT' ? 2 : 1;
 
   gameState.judgeText = grade;
-  gameState.judgeT = 550;
+  gameState.judgeT = 600;
 
   gameState.effects.push({
     x: lane * gameState.laneW + gameState.laneW / 2,
-    y: GAME.HIT_Y,
+    y: gameState.hitY,
     t: 380,
     max: 380,
     grade,
@@ -59,7 +59,8 @@ function applyScore(lane, grade) {
 // ── Called when a lane key is pressed ────────────────────────────
 export function hitLane(lane) {
   const overclock = gameState.hasModifier('overclock') ? 1.2 : 1.0;
-  const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * overclock;
+  const spd = gameState.baseSpd * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * gameState.noteSpeed * overclock;
+  const hitY = gameState.hitY;
   let bestNote = null;
   let bestDistance = Infinity;
 
@@ -70,13 +71,13 @@ export function hitLane(lane) {
     if (note.type === 'hold') {
       const tailY = note.y - note.duration * spd;
       // Body covers hit zone → distance = 0 so it always qualifies
-      if (tailY <= GAME.HIT_Y && note.y >= GAME.HIT_Y - GAME.NOTE_H) {
+      if (tailY <= hitY && note.y >= hitY - GAME.NOTE_H) {
         distance = 0;
       } else {
-        distance = Math.abs(note.y - GAME.HIT_Y);
+        distance = Math.abs(note.y - hitY);
       }
     } else {
-      distance = Math.abs(note.y - GAME.HIT_Y);
+      distance = Math.abs(note.y - hitY);
     }
 
     if (distance < bestDistance) {
@@ -120,8 +121,9 @@ export function update(dt) {
 
   // overclock: speed +20%
   const overclock = gameState.hasModifier('overclock') ? 1.2 : 1.0;
-  const spd = GAME.SPD * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * overclock;
-  const missThreshold = GAME.HIT_Y + GAME.GOOD_WIN * spd + 8;
+  const spd = gameState.baseSpd * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * gameState.noteSpeed * overclock;
+  const hitY = gameState.hitY;
+  const missThreshold = hitY + GAME.GOOD_WIN * spd + 8;
 
   for (const note of gameState.notes) {
     if (note.state === 'hit' || note.state === 'missed' || note.state === 'released') continue;
@@ -141,7 +143,7 @@ export function update(dt) {
 
     if (timeToHit <= GAME.LEAD_MS) {
       note.state = 'active';
-      note.y = GAME.HIT_Y - timeToHit * spd;
+      note.y = hitY - timeToHit * spd;
     }
 
     // ── Miss check ────────────────────────────────────────────────
@@ -152,7 +154,7 @@ export function update(dt) {
         gameState.allPerfect = false;
         gameState.missCount++;
         gameState.judgeText = 'MISS';
-        gameState.judgeT = 420;
+        gameState.judgeT = 600;
         // score_virus: miss deducts 100 pts
         if (gameState.hasModifier('score_virus')) {
           gameState.score = Math.max(0, gameState.score - 100);
