@@ -78,3 +78,35 @@ export function makeChart() {
 
   return notes.sort((a, b) => a.time - b.time);
 }
+
+// ── Theme-aware chart: injects special note types ─────────────────
+export function makeThemeChart(themeKey) {
+  const base = makeChart();
+  if (!themeKey || themeKey === 'cyber') return base;
+
+  let specialType, ratio;
+  if      (themeKey === 'forest') { specialType = 'trunk';   ratio = 0.15; }
+  else if (themeKey === 'ocean')  { specialType = 'zigzag';  ratio = 0.35; }
+  else if (themeKey === 'void')   { specialType = 'phantom'; ratio = 0.30; }
+  else if (themeKey === 'spring') { specialType = 'petal';   ratio = 0.25; }
+  else return base;
+
+  // Collect tap note indices (don't convert holds)
+  const tapIdxs = base.reduce((acc, n, i) => { if (n.type === 'tap') acc.push(i); return acc; }, []);
+  const count   = Math.floor(tapIdxs.length * ratio);
+  // Deterministic shuffle by note index so same chart is reproducible
+  const chosen  = tapIdxs.slice().sort((a, b) => ((a * 7 + 3) % 17) - ((b * 7 + 3) % 17)).slice(0, count);
+
+  const result = base.map(n => ({ ...n }));
+  for (const i of chosen) {
+    result[i].type = specialType;
+    if (specialType === 'zigzag') {
+      // Random path with 1–2 intermediate lanes; final lane = original lane
+      const lc = 4;
+      const final = result[i].lane;
+      const mid   = (final + 1 + Math.floor(((i * 13) % 3))) % lc;
+      result[i].path = [mid, final];
+    }
+  }
+  return result.sort((a, b) => a.time - b.time);
+}

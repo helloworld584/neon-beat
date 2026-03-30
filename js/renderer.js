@@ -3,6 +3,7 @@
 // ================================================================
 
 import { GAME, INPUT, VISUAL, GAME_STATES, TRACKS, VIBE_COLORS, SPEED_MULTIPLIERS, SHOP_ITEMS, NOTE_SPEED_LEVELS, JUDGMENT_LINE_LEVELS } from './constants.js';
+import { THEMES, THEME_ORDER } from './themes.js';
 import { getImage } from './assets.js';
 import { gameState } from './state.js';
 import { musicPlayer } from './music.js';
@@ -33,6 +34,9 @@ export class Renderer {
     } else if (gameState.gameState === GAME_STATES.SETTINGS) {
       this.renderSettings(this.offCtx);
       this.drawScanlines(this.offCtx);
+    } else if (gameState.gameState === GAME_STATES.THEME_SELECT) {
+      this.renderThemeSelect(this.offCtx);
+      this.drawScanlines(this.offCtx);
     } else {
       this.drawScrollBG(this.offCtx);
       this.drawLanes(this.offCtx);
@@ -45,6 +49,7 @@ export class Renderer {
       this.drawMuteButton(this.offCtx);
       this.drawTrackName(this.offCtx);
       this.drawJudgment(this.offCtx);
+      this.drawGimmickOverlay(this.offCtx);
       this.drawScanlines(this.offCtx);
     }
 
@@ -132,7 +137,9 @@ export class Renderer {
     for (let i = 0; i < lc; i++) {
       const alpha = (gameState.keyDown[i] ? 0.13 : 0) + ((gameState.keyFlash[i] || 0) / 200) * 0.14;
       if (alpha > 0.01) {
-        rc.fillStyle = `rgba(${i % 2 === 0 ? '0,255,255' : '255,0,255'},${alpha.toFixed(3)})`;
+        const lc = gameState.getLaneColor(i);
+      const [r2,g2,b2] = [parseInt(lc.slice(1,3),16),parseInt(lc.slice(3,5),16),parseInt(lc.slice(5,7),16)];
+      rc.fillStyle = `rgba(${r2},${g2},${b2},${alpha.toFixed(3)})`;
         rc.fillRect(i * lw, 0, lw, GAME.H);
       }
     }
@@ -166,7 +173,7 @@ export class Renderer {
     const lw = gameState.laneW;
     for (let i = 0; i < lc; i++) {
       const cx = i * lw + lw / 2;
-      const col = VISUAL.LANE_COL[i];
+      const col = gameState.getLaneColor(i);
       const pressed = gameState.keyDown[i] || (gameState.keyFlash[i] || 0) > 0;
 
       rc.shadowBlur = pressed ? 24 : 8;
@@ -191,81 +198,174 @@ export class Renderer {
   }
 
   drawNotes(rc) {
-    const noteCyan    = getImage('note_cyan');
-    const noteMagenta = getImage('note_magenta');
-    const overclock   = gameState.hasModifier('overclock') ? 1.2 : 1.0;
-    const spd = gameState.baseSpd * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * gameState.noteSpeed * overclock;
-    const ghostNotes  = gameState.hasModifier('ghost_notes');
+    const overclock  = gameState.hasModifier('overclock') ? 1.2 : 1.0;
+    const spd        = gameState.baseSpd * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * gameState.noteSpeed * overclock;
+    const ghostNotes = gameState.hasModifier('ghost_notes');
     const lw = gameState.laneW;
     const nw = gameState.noteW;
+    const gimmick = gameState.getTheme().gimmick;
 
-    // First pass: hold bodies (drawn behind note caps)
+    // First pass: hold bodies
     for (const note of gameState.notes) {
       if (note.type !== 'hold') continue;
       if (note.state === 'active' || note.state === 'holding') {
-        this._drawHoldBody(rc, note, spd);
+        this._drawHoldBody(rc, note, spd, lw, nw);
       }
     }
 
-    // Second pass: note caps (tap + hold head)
+    // Zigzag trails (before caps)
+    for (const note of gameState.notes) {
+      if (note.type !== 'zigzag' || note.state !== 'active') continue;
+      if (!note.path) continue;
+      this._drawZigzagTrail(rc, note, lw);
+    }
+
+    // Note caps
     for (const note of gameState.notes) {
       if (note.state !== 'active') continue;
       if (note.y < GAME.SPAWN_Y - 10 || note.y > gameState.hitY + 60) continue;
 
-      const x   = note.lane * lw + (lw - nw) / 2;
-      const y   = note.y - GAME.NOTE_H / 2;
-      const col = VISUAL.LANE_COL[note.lane];
+      // Visual X: ocean current lerp; sway offset for forest
+      const visualLane = (gameState.currentShifting && note.prevLane !== undefined)
+        ? note.prevLane + (note.lane - note.prevLane) * gameState.currentShiftLerp
+        : note.lane;
+      let visualX = visualLane * lw + (lw - nw) / 2;
+      if (gimmick === 'sway') {
+        visualX += Math.sin(note.y / 100 + note.time * 0.0001) * 8;
+      } else if (note.type === 'petal') {
+        visualX += Math.sin(note.y / 80 + note.time * 0.0001) * 8;
+      }
 
-      // ghost_notes: fade out as the note approaches the hit zone
+      const x   = visualX;
+      const y   = note.y - GAME.NOTE_H / 2;
+      const col = gameState.getLaneColor(note.lane);
+
+      // Phantom: fade in from 300ms to 100ms before hit
       let alpha = 1;
+      if (note.type === 'phantom') {
+        const tth = note._timeToHit ?? 0;
+        alpha = Math.max(0, Math.min(1, (300 - tth) / 200));
+        // Subtle shimmer at full invisibility
+        if (alpha < 0.05) {
+          rc.save();
+          rc.globalAlpha = 0.15 + 0.10 * Math.sin(gameState.pulse * Math.PI * 2 * 8);
+          rc.fillStyle = col;
+          rc.beginPath();
+          rc.arc(x + nw / 2, note.y, 4, 0, Math.PI * 2);
+          rc.fill();
+          rc.restore();
+          continue;
+        }
+      }
+
       if (ghostNotes) {
         const dist = Math.max(0, gameState.hitY - note.y);
-        alpha = Math.min(1, dist / (gameState.hitY * 0.5));
+        alpha = Math.min(alpha, Math.min(1, dist / (gameState.hitY * 0.5)));
       }
 
       rc.save();
       rc.globalAlpha = alpha;
-      rc.shadowBlur  = 24;
-      rc.shadowColor = col;
 
-      if (gameState.noteShape === 'circle') {
-        const cx2    = x + nw / 2;
-        const cy2    = y + GAME.NOTE_H / 2;
-        const radius = nw / 2 - 3;
-        rc.fillStyle = col;
-        rc.beginPath();
-        rc.arc(cx2, cy2, radius, 0, Math.PI * 2);
-        rc.fill();
-        // White ring
-        rc.shadowBlur  = 0;
-        rc.strokeStyle = 'rgba(255,255,255,0.9)';
-        rc.lineWidth   = 2;
-        rc.beginPath();
-        rc.arc(cx2, cy2, radius, 0, Math.PI * 2);
-        rc.stroke();
+      if (note.type === 'trunk') {
+        this._drawTrunkNote(rc, x, y, note, nw, col);
       } else {
-        // Rectangle — full opacity, strong glow, white border
-        rc.fillStyle = col;
-        rc.beginPath();
-        rc.roundRect(x, y, nw, GAME.NOTE_H, 4);
-        rc.fill();
-        rc.shadowBlur  = 0;
-        rc.strokeStyle = 'rgba(255,255,255,0.85)';
-        rc.lineWidth   = 2;
-        rc.beginPath();
-        rc.roundRect(x + 1, y + 1, nw - 2, GAME.NOTE_H - 2, 3);
-        rc.stroke();
+        rc.shadowBlur  = 24;
+        rc.shadowColor = col;
+        this._drawNoteCap(rc, x, y, nw, col);
       }
+      rc.restore();
+    }
 
+    // Petal particles (spring wind gimmick)
+    if (gimmick === 'wind') this._drawPetalParticles(rc);
+  }
+
+  _drawNoteCap(rc, x, y, nw, col) {
+    if (gameState.noteShape === 'circle') {
+      const cx2 = x + nw / 2, cy2 = y + GAME.NOTE_H / 2, r = nw / 2 - 3;
+      rc.fillStyle = col;
+      rc.beginPath(); rc.arc(cx2, cy2, r, 0, Math.PI * 2); rc.fill();
+      rc.shadowBlur = 0; rc.strokeStyle = 'rgba(255,255,255,0.9)'; rc.lineWidth = 2;
+      rc.beginPath(); rc.arc(cx2, cy2, r, 0, Math.PI * 2); rc.stroke();
+    } else {
+      rc.fillStyle = col;
+      rc.beginPath(); rc.roundRect(x, y, nw, GAME.NOTE_H, 4); rc.fill();
+      rc.shadowBlur = 0; rc.strokeStyle = 'rgba(255,255,255,0.85)'; rc.lineWidth = 2;
+      rc.beginPath(); rc.roundRect(x + 1, y + 1, nw - 2, GAME.NOTE_H - 2, 3); rc.stroke();
+    }
+  }
+
+  _drawTrunkNote(rc, x, y, note, nw, col) {
+    // Gold glow, 10% larger
+    const scale = 1.10;
+    const nx = x - (nw * (scale - 1)) / 2;
+    const nh = GAME.NOTE_H * scale;
+    rc.shadowBlur  = 30;
+    rc.shadowColor = '#ffdd00';
+    rc.fillStyle   = '#ffdd00';
+    if (gameState.noteShape === 'circle') {
+      const r = (nw * scale) / 2 - 3;
+      const cx2 = x + nw / 2, cy2 = y + GAME.NOTE_H / 2;
+      rc.beginPath(); rc.arc(cx2, cy2, r, 0, Math.PI * 2); rc.fill();
+      rc.shadowBlur = 0; rc.strokeStyle = 'rgba(255,255,200,0.9)'; rc.lineWidth = 2;
+      rc.beginPath(); rc.arc(cx2, cy2, r, 0, Math.PI * 2); rc.stroke();
+    } else {
+      rc.beginPath(); rc.roundRect(nx, y, nw * scale, nh, 4); rc.fill();
+      rc.shadowBlur = 0; rc.strokeStyle = 'rgba(255,255,200,0.9)'; rc.lineWidth = 2;
+      rc.beginPath(); rc.roundRect(nx + 1, y + 1, nw * scale - 2, nh - 2, 3); rc.stroke();
+    }
+    // Star indicator above note
+    rc.shadowBlur = 0; rc.fillStyle = '#ffee44';
+    rc.font = 'bold 11px Orbitron,monospace';
+    rc.textAlign = 'center'; rc.textBaseline = 'bottom';
+    rc.fillText('★', x + nw / 2, y - 2);
+  }
+
+  _drawZigzagTrail(rc, note, lw) {
+    if (!note.path || note.path.length < 1) return;
+    rc.save();
+    rc.globalAlpha = 0.55;
+    rc.strokeStyle = gameState.getLaneColor(note.lane);
+    rc.lineWidth   = 2;
+    rc.setLineDash([5, 5]);
+    rc.shadowBlur  = 8;
+    rc.shadowColor = gameState.getLaneColor(note.lane);
+    rc.beginPath();
+    // Draw from each intermediate path lane at the note's y, converging to final lane
+    const hitY = gameState.hitY;
+    const fullLanes = [note.path[0], ...note.path.slice(1)];
+    for (let i = 0; i < fullLanes.length; i++) {
+      const laneX = fullLanes[i] * lw + lw / 2;
+      const segY  = note.y - (note.path.length - i) * 40;
+      if (i === 0) rc.moveTo(laneX, segY);
+      else         rc.lineTo(laneX, segY);
+    }
+    rc.lineTo(note.lane * lw + lw / 2, note.y);
+    rc.stroke();
+    rc.setLineDash([]);
+    rc.restore();
+  }
+
+  _drawPetalParticles(rc) {
+    for (const p of gameState.petalParticles) {
+      const alpha = Math.min(1, p.life / 800);
+      rc.save();
+      rc.globalAlpha = alpha * 0.75;
+      rc.translate(p.x, p.y);
+      rc.rotate(p.rot);
+      rc.fillStyle = p.col;
+      rc.shadowBlur = 6;
+      rc.shadowColor = p.col;
+      rc.beginPath();
+      rc.ellipse(0, 0, p.size, p.size * 0.6, 0, 0, Math.PI * 2);
+      rc.fill();
       rc.restore();
     }
   }
 
   // ── Hold note body renderer ──────────────────────────────────────
-  _drawHoldBody(rc, note, spd) {
-    const lw      = gameState.laneW;
-    const nw      = gameState.noteW;
-    const col     = VISUAL.LANE_COL[note.lane];
+  _drawHoldBody(rc, note, spd, lw = gameState.laneW, nw = gameState.noteW) {
+    const col     = gameState.getLaneColor(note.lane);
     const laneX   = note.lane * lw;
     const capX    = laneX + (lw - nw) / 2;
     const isCyan  = note.lane % 2 === 0;
@@ -417,7 +517,7 @@ export class Renderer {
 
     for (let i = 0; i < lc; i++) {
       const cx = i * lw + lw / 2;
-      const col = VISUAL.LANE_COL[i];
+      const col = gameState.getLaneColor(i);
       const pressed = gameState.keyDown[i];
 
       rc.save();
@@ -741,50 +841,37 @@ export class Renderer {
       rc.restore();
     }
 
-    // ── Bottom utility buttons ────────────────────────────────────────
-    // [NOTE SHAPE]  [KEYBINDS]
-    const btnY  = 656;
-    const btnH  = 26;
+    // ── Bottom utility buttons: [NOTE SHAPE] [THEME] [KEYBINDS] ─────
+    const btnY = 656, btnH = 26;
+    const activeTheme = gameState.getTheme();
+    const themeCol = activeTheme.colors.glow;
 
-    // NOTE SHAPE toggle
+    const _drawBtn = (label, fillCol, strokeCol, textCol, x, w) => {
+      rc.save();
+      rc.font = 'bold 10px Orbitron,monospace';
+      rc.fillStyle   = fillCol;
+      rc.strokeStyle = strokeCol;
+      rc.lineWidth = 1;
+      rc.beginPath(); rc.roundRect(x, btnY, w, btnH, 5); rc.fill(); rc.stroke();
+      rc.textAlign = 'center'; rc.textBaseline = 'middle';
+      rc.fillStyle = textCol; rc.shadowBlur = 0;
+      rc.fillText(label, x + w / 2, btnY + btnH / 2);
+      rc.restore();
+    };
+
+    rc.font = 'bold 10px Orbitron,monospace';
     const shapeLabel = `NOTE: ${gameState.noteShape === 'circle' ? '\u25cf CIRCLE' : '\u25a0 RECT'}`;
-    rc.save();
-    rc.font = 'bold 10px Orbitron,monospace';
+    const themeLabel = `\u25c6 ${activeTheme.name}`;
+    const kbLabel    = 'KEYBINDS';
     const shapeW = rc.measureText(shapeLabel).width + 20;
-    const shapeX = GAME.W / 2 - shapeW - 6;
-    rc.fillStyle  = 'rgba(0,255,255,0.10)';
-    rc.strokeStyle = 'rgba(0,255,255,0.5)';
-    rc.lineWidth = 1;
-    rc.beginPath();
-    rc.roundRect(shapeX, btnY, shapeW, btnH, 5);
-    rc.fill();
-    rc.stroke();
-    rc.textAlign = 'center';
-    rc.textBaseline = 'middle';
-    rc.fillStyle = '#00ffff';
-    rc.shadowBlur = 0;
-    rc.fillText(shapeLabel, shapeX + shapeW / 2, btnY + btnH / 2);
-    rc.restore();
+    const themeW = rc.measureText(themeLabel).width + 20;
+    const kbW    = rc.measureText(kbLabel).width + 20;
+    const totalW = shapeW + themeW + kbW + 12;
+    let bx = (GAME.W - totalW) / 2;
 
-    // KEYBINDS button
-    const kbLabel = 'KEYBINDS';
-    rc.save();
-    rc.font = 'bold 10px Orbitron,monospace';
-    const kbW = rc.measureText(kbLabel).width + 20;
-    const kbX = GAME.W / 2 + 6;
-    rc.fillStyle   = 'rgba(255,0,255,0.10)';
-    rc.strokeStyle = 'rgba(255,0,255,0.5)';
-    rc.lineWidth = 1;
-    rc.beginPath();
-    rc.roundRect(kbX, btnY, kbW, btnH, 5);
-    rc.fill();
-    rc.stroke();
-    rc.textAlign = 'center';
-    rc.textBaseline = 'middle';
-    rc.fillStyle = '#ff00ff';
-    rc.shadowBlur = 0;
-    rc.fillText(kbLabel, kbX + kbW / 2, btnY + btnH / 2);
-    rc.restore();
+    _drawBtn(shapeLabel, 'rgba(0,255,255,0.10)', 'rgba(0,255,255,0.50)', '#00ffff',  bx, shapeW); bx += shapeW + 6;
+    _drawBtn(themeLabel, `rgba(${_hexToRgb(themeCol)},0.12)`, `rgba(${_hexToRgb(themeCol)},0.55)`, themeCol, bx, themeW); bx += themeW + 6;
+    _drawBtn(kbLabel,    'rgba(255,0,255,0.10)', 'rgba(255,0,255,0.50)', '#ff00ff',  bx, kbW);
 
     // Hint below buttons
     rc.save();
@@ -792,7 +879,7 @@ export class Renderer {
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
     rc.fillStyle = 'rgba(255,255,255,0.45)';
-    rc.fillText('S \u2192 NOTE SHAPE   \u2022   K \u2192 KEYBINDS', GAME.W / 2, btnY + btnH + 10);
+    rc.fillText('S \u2192 SHAPE   \u2022   T \u2192 THEME   \u2022   K \u2192 KEYBINDS', GAME.W / 2, btnY + btnH + 10);
     rc.restore();
   }
 
@@ -1382,6 +1469,170 @@ export class Renderer {
     rc.restore();
   }
 
+  // ── Gimmick overlay (PLAYING state) ──────────────────────────────
+  drawGimmickOverlay(rc) {
+    const gimmick = gameState.getTheme().gimmick;
+    if (!gimmick) return;
+
+    // OCEAN: current warning banner + lane arrows during shift
+    if (gimmick === 'current') {
+      if (gameState.currentWarningActive) {
+        const dir  = gameState.currentShiftDir;
+        const fade = Math.min(1, gameState.currentWarningT / 500);
+        rc.save();
+        rc.globalAlpha = fade * 0.88;
+        rc.fillStyle = 'rgba(0,180,255,0.15)';
+        rc.fillRect(0, GAME.H / 2 - 28, GAME.W, 56);
+        rc.font = 'bold 16px Orbitron,monospace';
+        rc.textAlign = 'center';
+        rc.textBaseline = 'middle';
+        rc.fillStyle = '#00cfff';
+        rc.shadowBlur = 14;
+        rc.shadowColor = '#00cfff';
+        const arrow = dir > 0 ? '▶ CURRENT SHIFTING' : 'CURRENT SHIFTING ◀';
+        rc.fillText(arrow, GAME.W / 2, GAME.H / 2);
+        rc.restore();
+      }
+      if (gameState.currentShifting) {
+        const lw = gameState.laneW;
+        const lc = gameState.laneCount;
+        const lerp = gameState.currentShiftLerp;
+        const dir  = gameState.currentShiftDir;
+        rc.save();
+        rc.globalAlpha = 0.60;
+        rc.font = 'bold 14px Orbitron,monospace';
+        rc.textAlign = 'center';
+        rc.textBaseline = 'middle';
+        rc.fillStyle = '#00cfff';
+        rc.shadowBlur = 8;
+        rc.shadowColor = '#00cfff';
+        for (let i = 0; i < lc; i++) {
+          const cx = i * lw + lw / 2;
+          rc.fillText(dir > 0 ? '→' : '←', cx, gameState.hitY - 40);
+        }
+        rc.restore();
+      }
+    }
+  }
+
+  // ── Theme select screen ───────────────────────────────────────────
+  renderThemeSelect(rc) {
+    rc.fillStyle = '#03000f';
+    rc.fillRect(0, 0, GAME.W, GAME.H);
+
+    // Subtle grid
+    rc.save();
+    rc.strokeStyle = 'rgba(0,255,255,0.04)';
+    rc.lineWidth = 1;
+    for (let x = 0; x < GAME.W; x += 40) { rc.beginPath(); rc.moveTo(x,0); rc.lineTo(x,GAME.H); rc.stroke(); }
+    for (let y = 0; y < GAME.H; y += 40) { rc.beginPath(); rc.moveTo(0,y); rc.lineTo(GAME.W,y); rc.stroke(); }
+    rc.restore();
+
+    // Back hint
+    rc.save();
+    rc.font = 'bold 11px Orbitron,monospace';
+    rc.textAlign = 'left'; rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.65)';
+    rc.fillText('← BACK', 20, 40);
+    rc.restore();
+
+    // Header
+    rc.save();
+    rc.font = '900 20px Orbitron,monospace';
+    rc.textAlign = 'center'; rc.textBaseline = 'middle';
+    rc.fillStyle = '#00ffff';
+    rc.shadowBlur = 18; rc.shadowColor = '#00ffff';
+    rc.fillText('SELECT THEME', GAME.W / 2, 40);
+    rc.restore();
+
+    // Theme cards
+    const cardX = 25, cardW = 340, cardH = 90, cardGap = 10, cardY0 = 70;
+    for (let i = 0; i < THEME_ORDER.length; i++) {
+      const key     = THEME_ORDER[i];
+      const theme   = THEMES[key];
+      const cy      = cardY0 + i * (cardH + cardGap);
+      const sel     = i === gameState.themeCursor;
+      const active  = key === gameState.activeTheme;
+      const locked  = !gameState.unlockedThemes.includes(key);
+      const col     = theme.colors.glow;
+
+      // Card background
+      rc.save();
+      rc.globalAlpha = locked ? 0.45 : 1;
+      rc.fillStyle   = sel   ? `rgba(${_hexToRgb(col)},0.14)` : 'rgba(255,255,255,0.03)';
+      rc.strokeStyle = active ? col : sel ? `rgba(${_hexToRgb(col)},0.70)` : 'rgba(255,255,255,0.12)';
+      rc.lineWidth   = active ? 2.5 : sel ? 1.5 : 1;
+      rc.shadowBlur  = sel ? 14 : 0;
+      rc.shadowColor = col;
+      rc.beginPath();
+      rc.roundRect(cardX, cy, cardW, cardH, 8);
+      rc.fill(); rc.stroke();
+
+      if (active) {
+        rc.fillStyle = col;
+        rc.shadowBlur = 6; rc.shadowColor = col;
+        rc.fillRect(cardX, cy + 10, 3, cardH - 20);
+      }
+      rc.restore();
+
+      if (locked) {
+        // Locked: dark + condition text
+        rc.save();
+        rc.globalAlpha = 0.50;
+        rc.font = 'bold 14px Orbitron,monospace';
+        rc.textAlign = 'left'; rc.textBaseline = 'middle';
+        rc.fillStyle = 'rgba(255,255,255,0.40)';
+        rc.fillText(`🔒 ${theme.name}`, cardX + 18, cy + 28);
+        rc.font = '400 10px Orbitron,monospace';
+        rc.fillStyle = 'rgba(255,255,255,0.30)';
+        rc.fillText(theme.unlockCondition || '', cardX + 18, cy + 52);
+        if (theme.gimmickLabel) {
+          rc.fillStyle = 'rgba(255,255,255,0.20)';
+          rc.fillText(theme.gimmickLabel, cardX + 18, cy + 70);
+        }
+        rc.restore();
+      } else {
+        // Unlocked: full info
+        rc.save();
+        rc.font = 'bold 15px Orbitron,monospace';
+        rc.textAlign = 'left'; rc.textBaseline = 'middle';
+        rc.fillStyle = sel ? '#ffffff' : col;
+        rc.shadowBlur = sel ? 8 : 0; rc.shadowColor = col;
+        rc.fillText(theme.name + (active ? '  ◀ ACTIVE' : ''), cardX + 18, cy + 26);
+
+        // Color swatches
+        for (let s = 0; s < 4; s++) {
+          rc.fillStyle = theme.colors.note[s];
+          rc.shadowBlur = 4; rc.shadowColor = theme.colors.note[s];
+          rc.beginPath();
+          rc.arc(cardX + 18 + s * 16, cy + 52, 5, 0, Math.PI * 2);
+          rc.fill();
+        }
+
+        if (theme.gimmickLabel) {
+          rc.shadowBlur = 0;
+          rc.font = '400 10px Orbitron,monospace';
+          rc.fillStyle = sel ? `rgba(${_hexToRgb(col)},0.90)` : 'rgba(255,255,255,0.50)';
+          rc.fillText(theme.gimmickLabel, cardX + 18, cy + 72);
+        } else {
+          rc.font = '400 10px Orbitron,monospace';
+          rc.fillStyle = 'rgba(255,255,255,0.30)';
+          rc.fillText('NO GIMMICK', cardX + 18, cy + 72);
+        }
+        rc.restore();
+      }
+    }
+
+    // Hint
+    rc.save();
+    rc.font = '400 10px Orbitron,monospace';
+    rc.textAlign = 'center'; rc.textBaseline = 'middle';
+    rc.fillStyle = 'rgba(255,255,255,0.50)';
+    rc.fillText('↑↓ NAVIGATE   •   ENTER / TAP  SELECT   •   ESC BACK',
+      GAME.W / 2, cardY0 + THEME_ORDER.length * (cardH + cardGap) + 18);
+    rc.restore();
+  }
+
   // ── Key bindings screen ───────────────────────────────────────────
   renderKeyBindings(rc) {
     rc.fillStyle = '#02000d';
@@ -1839,4 +2090,10 @@ export class Renderer {
 
     rc.restore();
   }
+}
+
+// ── Module-level hex→rgb helper ───────────────────────────────────
+function _hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return `${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)}`;
 }

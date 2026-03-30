@@ -3,7 +3,8 @@
 // ================================================================
 
 import { GAME, GAME_STATES } from './constants.js';
-import { loadAssets } from './assets.js';
+import { loadAssets, loadThemeAssets } from './assets.js';
+import { THEMES } from './themes.js';
 import { gameState } from './state.js';
 import { InputHandler } from './input.js';
 import { hitLane, update } from './game.js';
@@ -46,6 +47,8 @@ class NeonBeatGame {
 
   async init() {
     await loadAssets();
+    // Load active theme assets (non-blocking after base assets)
+    loadThemeAssets(THEMES[gameState.activeTheme]);
     musicPlayer.init();
     gameState.gameState = GAME_STATES.TITLE;
     this.startGameLoop();

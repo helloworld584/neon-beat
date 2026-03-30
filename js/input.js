@@ -3,6 +3,8 @@
 // ================================================================
 
 import { GAME, INPUT, GAME_STATES, TRACKS, SPEED_MULTIPLIERS, NOTE_SPEED_LEVELS, JUDGMENT_LINE_LEVELS } from './constants.js';
+import { THEMES, THEME_ORDER } from './themes.js';
+import { loadThemeAssets } from './assets.js';
 import { gameState } from './state.js';
 import { musicPlayer } from './music.js';
 import { releaseLane } from './game.js';
@@ -62,6 +64,11 @@ export class InputHandler {
       return;
     }
 
+    if (gameState.gameState === GAME_STATES.THEME_SELECT) {
+      this._handleThemeSelectKey(e.key);
+      return;
+    }
+
     if (gameState.gameState === GAME_STATES.TITLE) {
       if (e.key.toLowerCase() === 's') {
         gameState.noteShape = gameState.noteShape === 'circle' ? 'rectangle' : 'circle';
@@ -71,6 +78,11 @@ export class InputHandler {
       if (e.key.toLowerCase() === 'k') {
         gameState.keybindingSlot = -1;
         gameState.gameState = GAME_STATES.KEYBINDINGS;
+        return;
+      }
+      if (e.key.toLowerCase() === 't') {
+        gameState.themeCursor = THEME_ORDER.indexOf(gameState.activeTheme);
+        gameState.gameState = GAME_STATES.THEME_SELECT;
         return;
       }
     }
@@ -162,6 +174,34 @@ export class InputHandler {
       gameState.keybindingSlot = 0;
       return;
     }
+  }
+
+  _handleThemeSelectKey(key) {
+    switch (key) {
+      case 'Escape': gameState.gameState = GAME_STATES.TITLE; break;
+      case 'ArrowUp': case 'w': case 'W':
+        gameState.themeCursor = (gameState.themeCursor - 1 + THEME_ORDER.length) % THEME_ORDER.length;
+        break;
+      case 'ArrowDown': case 's': case 'S':
+        gameState.themeCursor = (gameState.themeCursor + 1) % THEME_ORDER.length;
+        break;
+      case 'Enter': case ' ':
+        this._selectTheme(gameState.themeCursor);
+        break;
+    }
+  }
+
+  _selectTheme(idx) {
+    const key = THEME_ORDER[idx];
+    if (!key || !gameState.unlockedThemes.includes(key)) return;
+    gameState.activeTheme = key;
+    gameState.saveActiveTheme();
+    // Reset music cursor since track list may change
+    gameState.musicSelectCursor = 0;
+    gameState.selectedTrack = 0;
+    // Load theme assets asynchronously
+    loadThemeAssets(THEMES[key]);
+    gameState.gameState = GAME_STATES.TITLE;
   }
 
   _handleSettingsKey(key) {
@@ -312,6 +352,12 @@ export class InputHandler {
       return;
     }
 
+    // Theme select touch handling
+    if (gameState.gameState === GAME_STATES.THEME_SELECT) {
+      this._handleThemeSelectTouch(tx, ty);
+      return;
+    }
+
     // Music select full touch handling
     if (gameState.gameState === GAME_STATES.MUSIC_SELECT) {
       this._handleMusicSelectTouch(tx, ty);
@@ -407,17 +453,20 @@ export class InputHandler {
       return;
     }
 
-    // Title screen utility buttons (NOTE SHAPE and KEYBINDS), y=656 h=26
+    // Title screen utility buttons (NOTE SHAPE | THEME | KEYBINDS), y=656 h=26
     if (gameState.gameState === GAME_STATES.TITLE && ty >= 650 && ty < 688) {
-      if (tx < GAME.W / 2) {
+      const third = GAME.W / 3;
+      if (tx < third) {
         gameState.noteShape = gameState.noteShape === 'circle' ? 'rectangle' : 'circle';
         gameState.saveNoteShape();
-        return;
+      } else if (tx < third * 2) {
+        gameState.themeCursor = THEME_ORDER.indexOf(gameState.activeTheme);
+        gameState.gameState = GAME_STATES.THEME_SELECT;
       } else {
         gameState.keybindingSlot = -1;
         gameState.gameState = GAME_STATES.KEYBINDINGS;
-        return;
       }
+      return;
     }
 
     // Lane tap → drives TITLE→SELECT, PLAYING hits
@@ -458,6 +507,25 @@ export class InputHandler {
     if (tx >= btnX2 && tx < btnX2 + btnW2 && ty >= startY && ty < startY + btnH2) {
       this._startGame();
       return;
+    }
+  }
+
+  _handleThemeSelectTouch(tx, ty) {
+    // BACK (top-left)
+    if (ty <= 70 && tx <= 100) { gameState.gameState = GAME_STATES.TITLE; return; }
+
+    // Theme cards: 5 cards, each 340×100px, centered, starting at y=90
+    const cardX = 25, cardW = 340, cardH = 90, cardGap = 10, cardY0 = 90;
+    for (let i = 0; i < THEME_ORDER.length; i++) {
+      const cy = cardY0 + i * (cardH + cardGap);
+      if (tx >= cardX && tx < cardX + cardW && ty >= cy && ty < cy + cardH) {
+        gameState.themeCursor = i;
+        const key = THEME_ORDER[i];
+        if (gameState.unlockedThemes.includes(key)) {
+          this._selectTheme(i);
+        }
+        return;
+      }
     }
   }
 

@@ -7,9 +7,11 @@ import { gameState } from './state.js';
 import { soundEngine } from './sound.js';
 
 // ── Shared scoring helper ─────────────────────────────────────────
-function applyScore(lane, grade) {
-  gameState.combo++;
-  if (gameState.combo > gameState.maxCombo) gameState.maxCombo = gameState.combo;
+function applyScore(lane, grade, isTrunk) {
+  if (!isTrunk) {
+    gameState.combo++;
+    if (gameState.combo > gameState.maxCombo) gameState.maxCombo = gameState.combo;
+  }
 
   if (grade === 'PERFECT') gameState.perfectCount++;
   else                     gameState.goodCount++;
@@ -17,15 +19,12 @@ function applyScore(lane, grade) {
 
   let comboMult = 1 + Math.floor(gameState.combo / 10) * 0.5;
   let modMult   = 1;
-
   if (gameState.hasModifier('overclock'))   modMult *= 2;
   if (gameState.hasModifier('mirror'))      modMult *= 1.5;
-  if (gameState.hasModifier('score_virus')) modMult *= 1;  // virus handled at clear
 
-  let baseScore = grade === 'PERFECT' ? 300 : 100;
+  let baseScore = isTrunk ? 500 : (grade === 'PERFECT' ? 300 : 100);
   let pts = Math.floor(baseScore * comboMult * modMult);
 
-  // auto_heal: bonus ×1.5 every 10 consecutive PERFECTs
   if (gameState.hasModifier('auto_heal') && grade === 'PERFECT' && gameState.combo % 10 === 0) {
     pts = Math.floor(pts * 1.5);
     gameState.glitchT = 300;
@@ -33,24 +32,19 @@ function applyScore(lane, grade) {
   }
 
   gameState.score += pts;
-
-  // Earn credits
   gameState.credits += grade === 'PERFECT' ? 2 : 1;
-
-  gameState.judgeText = grade;
+  gameState.judgeText = isTrunk ? 'BONUS!' : grade;
   gameState.judgeT = 600;
 
   gameState.effects.push({
     x: lane * gameState.laneW + gameState.laneW / 2,
     y: gameState.hitY,
-    t: 380,
-    max: 380,
-    grade,
+    t: 380, max: 380, grade,
   });
 
   soundEngine.playHit(grade);
 
-  if ([10, 25, 50].includes(gameState.combo)) {
+  if (!isTrunk && [10, 25, 50].includes(gameState.combo)) {
     gameState.glitchT = 520;
     gameState.glitchStr = gameState.combo >= 50 ? 1.0 : gameState.combo >= 25 ? 0.7 : 0.45;
   }
@@ -65,29 +59,20 @@ export function hitLane(lane) {
   let bestDistance = Infinity;
 
   for (const note of gameState.notes) {
+    // trunk/phantom/petal use their own lane; zigzag uses final lane (note.lane)
     if (note.lane !== lane || note.state !== 'active') continue;
 
     let distance;
     if (note.type === 'hold') {
       const tailY = note.y - note.duration * spd;
-      // Body covers hit zone → distance = 0 so it always qualifies
-      if (tailY <= hitY && note.y >= hitY - GAME.NOTE_H) {
-        distance = 0;
-      } else {
-        distance = Math.abs(note.y - hitY);
-      }
+      distance = (tailY <= hitY && note.y >= hitY - GAME.NOTE_H) ? 0 : Math.abs(note.y - hitY);
     } else {
       distance = Math.abs(note.y - hitY);
     }
-
-    if (distance < bestDistance) {
-      bestNote = note;
-      bestDistance = distance;
-    }
+    if (distance < bestDistance) { bestNote = note; bestDistance = distance; }
   }
 
   if (!bestNote) return;
-
   const ms = bestDistance / spd;
   if (ms > GAME.GOOD_WIN) return;
 
@@ -98,7 +83,9 @@ export function hitLane(lane) {
     const perfWin2 = GAME.PERF_WIN + (gameState.hasModifier('ghost_notes') ? 50 : 0);
     const grade = ms <= perfWin2 ? 'PERFECT' : 'GOOD';
     bestNote.state = 'hit';
-    applyScore(bestNote.lane, grade);
+    const isTrunk = bestNote.type === 'trunk';
+    if (isTrunk) gameState.trunkHitCount++;
+    applyScore(bestNote.lane, grade, isTrunk);
   }
 }
 
@@ -107,19 +94,79 @@ export function releaseLane(lane) {
   for (const note of gameState.notes) {
     if (note.lane !== lane || note.state !== 'holding') continue;
     const remaining = note.duration - note.holdTime;
-    // Release within the final PERF_WIN window → counts as PERFECT
     const grade = remaining <= GAME.PERF_WIN ? 'PERFECT' : 'GOOD';
     note.state = 'released';
-    applyScore(note.lane, grade);
+    applyScore(note.lane, grade, false);
     break;
   }
 }
 
-// ── Main update loop (called every frame while PLAYING) ──────────
+// ── Ocean current gimmick ─────────────────────────────────────────
+function updateCurrentGimmick(dt) {
+  const gs = gameState;
+
+  if (gs.currentShifting) {
+    gs.currentShiftAnimT -= dt;
+    gs.currentShiftLerp   = Math.max(0, 1 - gs.currentShiftAnimT / 1000);
+    if (gs.currentShiftAnimT <= 0) {
+      // Apply the shift: remap all pending/active note lanes
+      const dir = gs.currentShiftDir;
+      const lc  = gs.laneCount;
+      for (const n of gs.notes) {
+        if (n.state === 'hit' || n.state === 'missed' || n.state === 'released') continue;
+        n.prevLane = undefined;
+        n.lane = (n.lane + dir + lc) % lc;
+      }
+      gs.currentShiftOffset = (gs.currentShiftOffset + dir + lc) % lc;
+      gs.currentShiftLerp   = 0;
+      gs.currentShifting    = false;
+    }
+    return;
+  }
+
+  if (gs.currentWarningActive) {
+    gs.currentWarningT -= dt;
+    if (gs.currentWarningT <= 0) {
+      gs.currentWarningActive = false;
+      // Start shift animation
+      gs.currentShifting   = true;
+      gs.currentShiftAnimT = 1000;
+      gs.currentShiftLerp  = 0;
+      gs.currentShiftDir   = Math.random() < 0.5 ? 1 : -1;
+      // Pre-mark notes with prevLane for smooth animation
+      for (const n of gs.notes) {
+        if (n.state === 'hit' || n.state === 'missed' || n.state === 'released') continue;
+        n.prevLane = n.lane;
+      }
+    }
+    return;
+  }
+
+  gs.gimmickTimer -= dt;
+  if (gs.gimmickTimer <= 0) {
+    gs.currentWarningActive = true;
+    gs.currentWarningT      = 2000;
+    gs.gimmickTimer         = 10000;
+  }
+}
+
+// ── Spring wind gimmick ───────────────────────────────────────────
+function updateWindGimmick(dt) {
+  gameState.windTimer -= dt;
+  if (gameState.windTimer <= 0) {
+    gameState.spawnPetalBurst();
+    gameState.windTimer = 12000;
+  }
+}
+
+// ── Main update loop ──────────────────────────────────────────────
 export function update(dt) {
   gameState.updateSongTime();
 
-  // overclock: speed +20%
+  const gimmick = gameState.getTheme().gimmick;
+  if (gimmick === 'current') updateCurrentGimmick(dt);
+  if (gimmick === 'wind')    updateWindGimmick(dt);
+
   const overclock = gameState.hasModifier('overclock') ? 1.2 : 1.0;
   const spd = gameState.baseSpd * SPEED_MULTIPLIERS[gameState.speedMultiplierIdx] * gameState.noteSpeed * overclock;
   const hitY = gameState.hitY;
@@ -128,34 +175,34 @@ export function update(dt) {
   for (const note of gameState.notes) {
     if (note.state === 'hit' || note.state === 'missed' || note.state === 'released') continue;
 
-    // ── Active hold: advance hold timer ──────────────────────────
     if (note.state === 'holding') {
       note.holdTime += dt;
       if (note.holdTime >= note.duration) {
         note.state = 'hit';
-        applyScore(note.lane, 'PERFECT');
+        applyScore(note.lane, 'PERFECT', false);
       }
-      continue; // no position update needed while holding
+      continue;
     }
 
-    // ── Position update for pending/active notes ──────────────────
     const timeToHit = note.time - gameState.songTime;
-
     if (timeToHit <= GAME.LEAD_MS) {
       note.state = 'active';
       note.y = hitY - timeToHit * spd;
+      // Cache timeToHit on phantom notes for opacity calculation
+      if (note.type === 'phantom') note._timeToHit = timeToHit;
     }
 
-    // ── Miss check ────────────────────────────────────────────────
     if (note.state === 'active' && note.y > missThreshold) {
       const doMiss = () => {
         note.state = 'missed';
-        gameState.combo = 0;
-        gameState.allPerfect = false;
+        // trunk: miss does NOT break combo
+        if (note.type !== 'trunk') {
+          gameState.combo = 0;
+          gameState.allPerfect = false;
+        }
         gameState.missCount++;
         gameState.judgeText = 'MISS';
         gameState.judgeT = 600;
-        // score_virus: miss deducts 100 pts
         if (gameState.hasModifier('score_virus')) {
           gameState.score = Math.max(0, gameState.score - 100);
         }
@@ -169,17 +216,15 @@ export function update(dt) {
     }
   }
 
-  // ── Game over: last note (+ hold tail) has passed ────────────────
   const lastNote = gameState.notes[gameState.notes.length - 1];
   if (lastNote) {
     const tailEnd = lastNote.time + (lastNote.duration || 0);
     if (gameState.songTime > tailEnd + 3500) {
-      // Clear bonuses
-      gameState.credits += 50;                         // song clear bonus
-      if (gameState.allPerfect) gameState.credits += 200; // full perfect bonus
-      // score_virus: cleared alive → ×3 reward
+      gameState.credits += 50;
+      if (gameState.allPerfect) gameState.credits += 200;
       if (gameState.hasModifier('score_virus')) gameState.score = Math.floor(gameState.score * 3);
       gameState.saveCredits();
+      gameState.checkUnlocks();
       gameState.gameState = GAME_STATES.GAMEOVER;
     }
   }
