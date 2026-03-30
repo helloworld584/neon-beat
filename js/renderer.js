@@ -1166,18 +1166,18 @@ export class Renderer {
     rc.fillStyle = '#ff00ff';
     rc.shadowBlur = 20;
     rc.shadowColor = '#ff00ff';
-    rc.fillText('JACK IN  //  SHOP', GAME.W / 2, 52);
+    rc.fillText('JACK IN  //  SHOP', GAME.W / 2, 44);
     rc.restore();
 
     // Credits display (top-right)
     rc.save();
-    rc.font = 'bold 14px Orbitron,monospace';
+    rc.font = 'bold 16px Orbitron,monospace';
     rc.textAlign = 'right';
     rc.textBaseline = 'middle';
-    rc.fillStyle = '#00ffff';
-    rc.shadowBlur = 8;
-    rc.shadowColor = '#00ffff';
-    rc.fillText(`\u25c6 ${gameState.credits} CR`, GAME.W - 16, 52);
+    rc.fillStyle = '#ffcc00';
+    rc.shadowBlur = 10;
+    rc.shadowColor = '#ffcc00';
+    rc.fillText(`\u25c6 ${gameState.credits} CR`, GAME.W - 14, 44);
     rc.restore();
 
     // Active track name
@@ -1187,199 +1187,198 @@ export class Renderer {
       rc.font = '400 11px Orbitron,monospace';
       rc.textAlign = 'center';
       rc.textBaseline = 'middle';
-      rc.fillStyle = 'rgba(255,255,255,0.55)';
-      rc.fillText(`\u266a  ${track.title.toUpperCase()}`, GAME.W / 2, 76);
+      rc.fillStyle = 'rgba(255,255,255,0.50)';
+      rc.fillText(`\u266a  ${track.title.toUpperCase()}`, GAME.W / 2, 68);
       rc.restore();
     }
 
     // Divider
     rc.save();
-    rc.strokeStyle = 'rgba(255,0,255,0.25)';
+    rc.strokeStyle = 'rgba(255,0,255,0.30)';
     rc.lineWidth = 1;
     rc.beginPath();
-    rc.moveTo(20, 88); rc.lineTo(GAME.W - 20, 88);
+    rc.moveTo(16, 80); rc.lineTo(GAME.W - 16, 80);
     rc.stroke();
     rc.restore();
 
-    // ── Item cards ───────────────────────────────────────────────────
-    const items   = gameState.shopItems;
-    const nCards  = items.length;
-    const cardW   = 110;
-    const cardH   = 236;
-    const gap     = (GAME.W - nCards * cardW) / (nCards + 1);
-    const cardY   = 104;
+    // ── Item cards (full-width vertical layout) ──────────────────────
+    const items  = gameState.shopItems;
+    const nCards = items.length;
+    const cardX  = 15, cardW = 360, cardH = 108, cardGap = 8;
+    const cardY0 = 92;
 
     for (let i = 0; i < nCards; i++) {
-      const item  = items[i];
-      const cx    = gap + i * (cardW + gap);
-      const sel   = i === gameState.shopCursor;
-      const owned = item.purchased || gameState.hasModifier(item.id);
+      const item   = items[i];
+      const cy     = cardY0 + i * (cardH + cardGap);
+      const sel    = i === gameState.shopCursor;
+      const owned  = item.purchased || gameState.hasModifier(item.id);
       const canBuy = !owned && gameState.credits >= item.cost;
 
-      // Card bg
+      // Card background
       rc.save();
-      rc.fillStyle = sel
-        ? 'rgba(255,0,255,0.10)'
-        : 'rgba(255,255,255,0.03)';
-      rc.strokeStyle = sel
-        ? '#ff00ff'
-        : owned ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.08)';
-      rc.lineWidth = sel ? 1.5 : 1;
-      rc.shadowBlur = sel ? 12 : 0;
+      rc.fillStyle = sel ? 'rgba(255,0,255,0.10)' : 'rgba(255,255,255,0.03)';
+      rc.strokeStyle = sel ? '#ff00ff' : owned ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.12)';
+      rc.lineWidth = sel ? 2 : 1;
+      rc.shadowBlur = sel ? 14 : 0;
       rc.shadowColor = '#ff00ff';
       rc.beginPath();
-      rc.roundRect(cx, cardY, cardW, cardH, 8);
+      rc.roundRect(cardX, cy, cardW, cardH, 8);
       rc.fill();
       rc.stroke();
-      rc.restore();
-
-      // Item name
-      rc.save();
-      rc.font = 'bold 11px Orbitron,monospace';
-      rc.textAlign = 'center';
-      rc.textBaseline = 'top';
-      rc.fillStyle = sel ? '#ff88ff' : 'rgba(255,255,255,0.85)';
-      rc.shadowBlur = sel ? 6 : 0;
-      rc.shadowColor = '#ff00ff';
-      // wrap long names
-      const words = item.name.split(' ');
-      if (words.length > 1 && rc.measureText(item.name).width > cardW - 12) {
-        rc.fillText(words[0], cx + cardW / 2, cardY + 14);
-        rc.fillText(words.slice(1).join(' '), cx + cardW / 2, cardY + 26);
-      } else {
-        rc.fillText(item.name, cx + cardW / 2, cardY + 18);
+      if (sel) {
+        rc.fillStyle = '#ff00ff';
+        rc.shadowBlur = 8;
+        rc.shadowColor = '#ff00ff';
+        rc.fillRect(cardX, cy + 10, 3, cardH - 20);
       }
       rc.restore();
 
-      // Description
+      // ── Left: name + description ─────────────────────────────────
+      const textX = cardX + 18;
+
       rc.save();
-      rc.font = '400 9px Orbitron,monospace';
-      rc.textAlign = 'center';
+      rc.font = 'bold 14px Orbitron,monospace';
+      rc.textAlign = 'left';
       rc.textBaseline = 'top';
-      rc.fillStyle = 'rgba(255,255,255,0.70)';
-      // Split desc at '/' for two lines
-      const parts = item.desc.split('/');
+      rc.fillStyle = sel ? '#ffffff' : 'rgba(255,255,255,0.90)';
+      rc.shadowBlur = sel ? 8 : 0;
+      rc.shadowColor = '#ff00ff';
+      rc.fillText(item.name, textX, cy + 14);
+      rc.restore();
+
+      const parts = item.desc.split('/').map(p => p.trim());
+      rc.save();
+      rc.font = '400 11px Orbitron,monospace';
+      rc.textAlign = 'left';
+      rc.textBaseline = 'top';
+      rc.fillStyle = 'rgba(255,255,255,0.75)';
+      rc.shadowBlur = 0;
       parts.forEach((p, idx) => {
-        rc.fillText(p.trim(), cx + cardW / 2, cardY + 52 + idx * 14);
+        rc.fillText(p, textX, cy + 36 + idx * 17);
       });
       rc.restore();
 
-      // Cost
+      // ── Right: cost + button ─────────────────────────────────────
+      const rightX = cardX + cardW - 118;
+
       rc.save();
-      rc.font = 'bold 18px Orbitron,monospace';
       rc.textAlign = 'center';
-      rc.textBaseline = 'middle';
-      const costColor = owned ? 'rgba(255,255,255,0.2)'
-        : canBuy ? '#ffcc00'
-        : 'rgba(255,100,100,0.7)';
-      rc.fillStyle = costColor;
-      rc.shadowBlur = canBuy && !owned ? 8 : 0;
-      rc.shadowColor = '#ffcc00';
-      rc.fillText(item.cost === 0 ? 'FREE' : `${item.cost}`, cx + cardW / 2, cardY + 118);
-      if (!owned && item.cost > 0) {
-        rc.font = '400 8px Orbitron,monospace';
-        rc.shadowBlur = 0;
-        rc.fillStyle = 'rgba(255,204,0,0.5)';
-        rc.fillText('CR', cx + cardW / 2, cardY + 134);
+      rc.textBaseline = 'top';
+      if (owned) {
+        rc.font = 'bold 13px Orbitron,monospace';
+        rc.fillStyle = 'rgba(255,255,255,0.30)';
+        rc.fillText('OWNED', rightX + 54, cy + 16);
+      } else {
+        const costColor = canBuy ? '#ffcc00' : 'rgba(255,120,120,0.85)';
+        rc.font = 'bold 22px Orbitron,monospace';
+        rc.fillStyle = costColor;
+        rc.shadowBlur = canBuy ? 10 : 0;
+        rc.shadowColor = '#ffcc00';
+        rc.fillText(item.cost === 0 ? 'FREE' : `${item.cost}`, rightX + 54, cy + 12);
+        if (item.cost > 0) {
+          rc.font = 'bold 11px Orbitron,monospace';
+          rc.shadowBlur = 0;
+          rc.fillStyle = canBuy ? 'rgba(255,204,0,0.80)' : 'rgba(255,120,120,0.60)';
+          rc.fillText('CR', rightX + 54, cy + 38);
+        }
       }
       rc.restore();
 
-      // BUY / OWNED button
-      const btnW = cardW - 20, btnH = 28;
-      const btnX = cx + 10, btnY = cardY + cardH - 44;
+      const btnW = 108, btnH = 30;
+      const btnX = rightX, btnY = cy + cardH - btnH - 10;
       rc.save();
       if (owned) {
-        rc.fillStyle = 'rgba(255,255,255,0.06)';
-        rc.strokeStyle = 'rgba(255,255,255,0.15)';
+        rc.fillStyle = 'rgba(255,255,255,0.05)';
+        rc.strokeStyle = 'rgba(255,255,255,0.18)';
       } else if (canBuy) {
-        rc.fillStyle = sel ? 'rgba(255,0,255,0.22)' : 'rgba(255,0,255,0.10)';
+        rc.fillStyle = sel ? 'rgba(255,0,255,0.28)' : 'rgba(255,0,255,0.14)';
         rc.strokeStyle = '#ff00ff';
-        rc.shadowBlur = sel ? 10 : 0;
+        rc.shadowBlur = sel ? 12 : 4;
         rc.shadowColor = '#ff00ff';
       } else {
         rc.fillStyle = 'rgba(255,255,255,0.03)';
-        rc.strokeStyle = 'rgba(255,255,255,0.10)';
+        rc.strokeStyle = 'rgba(255,80,80,0.35)';
       }
-      rc.lineWidth = 1;
+      rc.lineWidth = 1.5;
       rc.beginPath();
-      rc.roundRect(btnX, btnY, btnW, btnH, 5);
+      rc.roundRect(btnX, btnY, btnW, btnH, 6);
       rc.fill();
       rc.stroke();
       rc.shadowBlur = 0;
-      rc.font = 'bold 9px Orbitron,monospace';
+      rc.font = 'bold 11px Orbitron,monospace';
       rc.textAlign = 'center';
       rc.textBaseline = 'middle';
       rc.fillStyle = owned
-        ? 'rgba(255,255,255,0.25)'
-        : canBuy ? '#ff88ff' : 'rgba(255,80,80,0.5)';
+        ? 'rgba(255,255,255,0.30)'
+        : canBuy ? '#ff88ff' : 'rgba(255,80,80,0.55)';
       rc.fillText(
-        owned ? '[ OWNED ]' : canBuy ? '[ BUY ]' : '[ N/A ]',
+        owned ? '[ OWNED ]' : canBuy ? '[ BUY ]' : '[ CANT BUY ]',
         btnX + btnW / 2, btnY + btnH / 2
       );
       rc.restore();
     }
 
     // ── Active modifiers row ─────────────────────────────────────────
+    const modsY = cardY0 + nCards * (cardH + cardGap) + 10;
     const mods = gameState.currentRun.modifiers;
     if (mods.length > 0) {
-      const rowY = cardY + cardH + 16;
       rc.save();
-      rc.font = '400 10px Orbitron,monospace';
-      rc.textAlign = 'center';
+      rc.font = 'bold 10px Orbitron,monospace';
+      rc.textAlign = 'left';
       rc.textBaseline = 'middle';
-      rc.fillStyle = 'rgba(255,255,255,0.55)';
-      rc.fillText('ACTIVE MODS', GAME.W / 2, rowY);
-      let pillX = 16;
-      const pillY = rowY + 14;
+      rc.fillStyle = 'rgba(255,255,255,0.50)';
+      rc.fillText('ACTIVE MODS:', cardX + 4, modsY + 10);
+      let pillX = cardX + 104;
       for (const id of mods) {
-        const item = SHOP_ITEMS.find(s => s.id === id);
-        const label = item ? item.name : id.toUpperCase();
-        rc.font = 'bold 9px Orbitron,monospace';
-        const pw = rc.measureText(label).width + 12;
-        rc.fillStyle = 'rgba(255,0,255,0.18)';
-        rc.strokeStyle = 'rgba(255,0,255,0.6)';
+        const it = SHOP_ITEMS.find(s => s.id === id);
+        const label = it ? it.name : id.toUpperCase();
+        rc.font = 'bold 10px Orbitron,monospace';
+        const pw = rc.measureText(label).width + 14;
+        rc.fillStyle = 'rgba(255,0,255,0.20)';
+        rc.strokeStyle = 'rgba(255,0,255,0.65)';
         rc.lineWidth = 1;
         rc.beginPath();
-        rc.roundRect(pillX, pillY, pw, 18, 9);
+        rc.roundRect(pillX, modsY + 2, pw, 20, 10);
         rc.fill();
         rc.stroke();
         rc.fillStyle = '#ff88ff';
         rc.shadowBlur = 0;
-        rc.fillText(label, pillX + pw / 2, pillY + 9);
+        rc.fillText(label, pillX + pw / 2, modsY + 12);
         pillX += pw + 6;
-        if (pillX > GAME.W - 20) break;
+        if (pillX > GAME.W - 16) break;
       }
       rc.restore();
     }
 
     // ── START button ─────────────────────────────────────────────────
-    const btnW2 = 200, btnH2 = 38;
-    const btnX2 = (GAME.W - btnW2) / 2, btnY2 = 770;
+    const startY = Math.max(modsY + (mods.length > 0 ? 38 : 10), 450);
+    const btnW2 = 220, btnH2 = 44;
+    const btnX2 = (GAME.W - btnW2) / 2;
     rc.save();
-    rc.fillStyle = 'rgba(0,255,255,0.12)';
+    rc.fillStyle = 'rgba(0,255,255,0.14)';
     rc.strokeStyle = '#00ffff';
-    rc.lineWidth = 1.5;
-    rc.shadowBlur = 12;
+    rc.lineWidth = 2;
+    rc.shadowBlur = 14;
     rc.shadowColor = '#00ffff';
     rc.beginPath();
-    rc.roundRect(btnX2, btnY2, btnW2, btnH2, 8);
+    rc.roundRect(btnX2, startY, btnW2, btnH2, 10);
     rc.fill();
     rc.stroke();
-    rc.shadowBlur = 5;
-    rc.font = 'bold 13px Orbitron,monospace';
+    rc.shadowBlur = 6;
+    rc.font = 'bold 15px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
     rc.fillStyle = '#00ffff';
-    rc.fillText('\u25b6  START', GAME.W / 2, btnY2 + btnH2 / 2);
+    rc.fillText('\u25b6  START GAME', GAME.W / 2, startY + btnH2 / 2);
     rc.restore();
 
-    // Keyboard hints
+    // ── Keyboard hints ────────────────────────────────────────────────
     rc.save();
-    rc.font = '400 10px Orbitron,monospace';
+    rc.font = '400 11px Orbitron,monospace';
     rc.textAlign = 'center';
     rc.textBaseline = 'middle';
-    rc.fillStyle = 'rgba(255,255,255,0.50)';
-    rc.fillText('\u2190\u2192 SELECT   \u2022   ENTER BUY   \u2022   S / TAP START', GAME.W / 2, 820);
+    rc.fillStyle = 'rgba(255,255,255,0.55)';
+    rc.fillText('\u2191\u2193 SELECT   \u2022   ENTER / TAP  BUY   \u2022   S  START', GAME.W / 2, startY + btnH2 + 22);
     rc.restore();
   }
 

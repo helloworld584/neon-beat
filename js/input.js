@@ -429,34 +429,34 @@ export class InputHandler {
   }
 
   _handleShopTouch(tx, ty) {
-    // START button
-    const btnW = 200, btnH = 38, btnX = (GAME.W - btnW) / 2, btnY = 770;
-    if (tx >= btnX && tx < btnX + btnW && ty >= btnY && ty < btnY + btnH) {
-      this._startGame();
-      return;
-    }
-
-    // Item cards: pick 3 cards laid out the same as renderer
+    // Item cards: full-width vertical layout (must match renderer.js renderShop)
     const items  = gameState.shopItems;
     const nCards = items.length;
-    if (nCards === 0) return;
-    const cardW  = 110;
-    const cardH  = 236;
-    const gap    = (GAME.W - nCards * cardW) / (nCards + 1);
-    const cardY  = 104;
-    const buyH   = 28;
+    const cardX = 15, cardW = 360, cardH = 108, cardGap = 8, cardY0 = 92;
+    // BUY button geometry (right side of card)
+    const buyBtnX = cardX + cardW - 118, buyBtnW = 108, buyBtnH = 30;
 
     for (let i = 0; i < nCards; i++) {
-      const cx  = gap + i * (cardW + gap);
-      if (tx < cx || tx >= cx + cardW || ty < cardY || ty >= cardY + cardH) continue;
+      const cy = cardY0 + i * (cardH + cardGap);
+      if (tx < cardX || tx >= cardX + cardW || ty < cy || ty >= cy + cardH) continue;
       // Select card on any tap
       gameState.shopCursor = i;
-      // BUY button area (bottom of card)
-      const btnY2 = cardY + cardH - 44;
-      if (ty >= btnY2 && ty < btnY2 + buyH) {
+      // BUY button: bottom-right of card
+      const buyBtnY = cy + cardH - buyBtnH - 10;
+      if (tx >= buyBtnX && tx < buyBtnX + buyBtnW && ty >= buyBtnY && ty < buyBtnY + buyBtnH) {
         const item = items[i];
         if (item) this._buyShopItem(item, i);
       }
+      return;
+    }
+
+    // START button (dynamic Y matching renderer)
+    const modsY = cardY0 + nCards * (cardH + cardGap) + 10;
+    const hasMods = gameState.currentRun.modifiers.length > 0;
+    const startY = Math.max(modsY + (hasMods ? 38 : 10), 450);
+    const btnW2 = 220, btnH2 = 44, btnX2 = (GAME.W - btnW2) / 2;
+    if (tx >= btnX2 && tx < btnX2 + btnW2 && ty >= startY && ty < startY + btnH2) {
+      this._startGame();
       return;
     }
   }
