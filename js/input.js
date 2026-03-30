@@ -279,10 +279,10 @@ export class InputHandler {
     const items = gameState.shopItems;
     const n = items.length;
     switch (key) {
-      case 'ArrowLeft': case 'a': case 'A':
+      case 'ArrowUp': case 'ArrowLeft': case 'a': case 'A':
         gameState.shopCursor = (gameState.shopCursor - 1 + n) % n;
         break;
-      case 'ArrowRight': case 'd': case 'D':
+      case 'ArrowDown': case 'ArrowRight': case 'd': case 'D':
         gameState.shopCursor = (gameState.shopCursor + 1) % n;
         break;
       case 'Enter': {

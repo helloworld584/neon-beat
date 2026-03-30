@@ -78,26 +78,57 @@ export class Renderer {
     rc.fillStyle = '#06001a';
     rc.fillRect(0, 0, GAME.W, GAME.H);
 
-    // Skyline (upper half, slower)
-    const sky = getImage('bg_sky');
-    if (sky) {
-      const th = sky.naturalHeight * (GAME.W / sky.naturalWidth);
+    const themeBg   = getImage('theme_bg');
+    const themeRoad = getImage('theme_bg_road');
+
+    if (themeRoad) {
+      // Theme has both sky + road layers
+      const sky = themeBg || getImage('bg_sky');
+      if (sky) {
+        const th = sky.naturalHeight * (GAME.W / sky.naturalWidth);
+        const offset = gameState.bgSky % th;
+        rc.save();
+        rc.globalAlpha = 0.6;
+        for (let y = -offset; y < GAME.H * 0.55; y += th) {
+          rc.drawImage(sky, 0, y, GAME.W, th);
+        }
+        rc.restore();
+      }
+      const th2 = themeRoad.naturalHeight * (GAME.W / themeRoad.naturalWidth);
+      const off2 = gameState.bgRoad % th2;
+      for (let y = -off2; y < GAME.H; y += th2) {
+        rc.drawImage(themeRoad, 0, y, GAME.W, th2);
+      }
+    } else if (themeBg) {
+      // Theme has only a single full-canvas background
+      const th = themeBg.naturalHeight * (GAME.W / themeBg.naturalWidth);
       const offset = gameState.bgSky % th;
       rc.save();
-      rc.globalAlpha = 0.6;
-      for (let y = -offset; y < GAME.H * 0.55; y += th) {
-        rc.drawImage(sky, 0, y, GAME.W, th);
+      rc.globalAlpha = 0.85;
+      for (let y = -offset; y < GAME.H; y += th) {
+        rc.drawImage(themeBg, 0, y, GAME.W, th);
       }
       rc.restore();
-    }
-
-    // Road (full canvas, faster)
-    const road = getImage('bg_road');
-    if (road) {
-      const th = road.naturalHeight * (GAME.W / road.naturalWidth);
-      const offset = gameState.bgRoad % th;
-      for (let y = -offset; y < GAME.H; y += th) {
-        rc.drawImage(road, 0, y, GAME.W, th);
+    } else {
+      // Fallback: base cyber assets
+      const sky = getImage('bg_sky');
+      if (sky) {
+        const th = sky.naturalHeight * (GAME.W / sky.naturalWidth);
+        const offset = gameState.bgSky % th;
+        rc.save();
+        rc.globalAlpha = 0.6;
+        for (let y = -offset; y < GAME.H * 0.55; y += th) {
+          rc.drawImage(sky, 0, y, GAME.W, th);
+        }
+        rc.restore();
+      }
+      const road = getImage('bg_road');
+      if (road) {
+        const th = road.naturalHeight * (GAME.W / road.naturalWidth);
+        const offset = gameState.bgRoad % th;
+        for (let y = -offset; y < GAME.H; y += th) {
+          rc.drawImage(road, 0, y, GAME.W, th);
+        }
       }
     }
 
@@ -368,10 +399,10 @@ export class Renderer {
     const col     = gameState.getLaneColor(note.lane);
     const laneX   = note.lane * lw;
     const capX    = laneX + (lw - nw) / 2;
-    const isCyan  = note.lane % 2 === 0;
     const bodyW   = nw - 20;
     const bodyX   = laneX + (lw - bodyW) / 2;
-    const fillRgb = isCyan ? '0,255,255' : '255,0,255';
+    const rgb     = _hexToRgb(col);
+    const fillRgb = `${rgb.r},${rgb.g},${rgb.b}`;
 
     rc.save();
 
@@ -1236,6 +1267,13 @@ export class Renderer {
     // Background
     rc.fillStyle = '#02000d';
     rc.fillRect(0, 0, GAME.W, GAME.H);
+    const shopBg = getImage('theme_shop');
+    if (shopBg) {
+      rc.save();
+      rc.globalAlpha = 0.35;
+      rc.drawImage(shopBg, 0, 0, GAME.W, GAME.H);
+      rc.restore();
+    }
 
     // Grid lines
     rc.save();
