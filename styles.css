@@ -1,3 +1,8 @@
+/* ================================================================
+   NEON BEAT – Cyberpunk 2077 / Apex Legends Style
+   Glassmorphism + Neon Glow UI
+   ================================================================ */
+
 * {
   margin: 0;
   padding: 0;
@@ -14,24 +19,100 @@ body {
   width: 100%;
   height: 100%;
   height: 100dvh;
-  background: #000;
+  /* Deep cyberpunk background gradient */
+  background: linear-gradient(
+    135deg,
+    #06001a 0%,
+    #0a0025 25%,
+    #120030 50%,
+    #0a0025 75%,
+    #06001a 100%
+  );
+  background-attachment: fixed;
   display: flex;
   justify-content: center;
   align-items: center;
   overflow: hidden;
-  position: fixed;          /* prevent iOS rubber-band scroll */
-  top: 0; left: 0;
-  /* honour notch / home-bar safe areas */
-  padding: env(safe-area-inset-top)  env(safe-area-inset-right)
+  position: fixed;
+  top: 0;
+  left: 0;
+  /* Honour notch / home-bar safe areas */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
            env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* Ambient glow effect behind canvas */
+body::before {
+  content: '';
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120%;
+  height: 120%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 255, 255, 0.08) 0%,
+    rgba(255, 0, 255, 0.05) 30%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: -1;
+  animation: ambientPulse 8s ease-in-out infinite;
+}
+
+@keyframes ambientPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 #c {
   display: block;
   max-height: 100%;
   max-width: 100%;
-  aspect-ratio: 390 / 844;  /* keeps 9:21 portrait ratio on any screen */
+  aspect-ratio: 390 / 844; /* 9:19 portrait ratio */
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  /* Subtle shadow glow around canvas */
+  box-shadow: 
+    0 0 60px rgba(0, 255, 255, 0.15),
+    0 0 120px rgba(255, 0, 255, 0.1),
+    inset 0 0 60px rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+}
+
+/* Mobile optimization - wider spacing on smaller screens */
+@media (max-width: 420px) {
+  body {
+    padding: max(8px, env(safe-area-inset-top))
+             max(4px, env(safe-area-inset-right))
+             max(8px, env(safe-area-inset-bottom))
+             max(4px, env(safe-area-inset-left));
+  }
+  
+  #c {
+    border-radius: 0;
+    box-shadow: 
+      0 0 40px rgba(0, 255, 255, 0.1),
+      0 0 80px rgba(255, 0, 255, 0.08);
+  }
+}
+
+/* Landscape mode optimization */
+@media (orientation: landscape) {
+  #c {
+    max-height: 95vh;
+    max-width: auto;
+  }
+}
+
+/* Hide scrollbars */
+::-webkit-scrollbar {
+  display: none;
+}
+
+html, body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
