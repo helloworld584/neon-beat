@@ -68,7 +68,7 @@ export class Renderer {
       this.drawNotes(this.offCtx);
       this.drawHitZone(this.offCtx);
       this.drawEffects(this.offCtx);
-      this.drawHUDFrame(this.offCtx);
+      this.drawProgressBar(this.offCtx);
       this.drawHUD(this.offCtx);
       this.drawMuteButton(this.offCtx);
       this.drawTrackName(this.offCtx);
@@ -216,27 +216,9 @@ export class Renderer {
     const themeBg   = getImage('theme_bg');
     const themeRoad = getImage('theme_bg_road');
 
-    if (themeRoad) {
-      // Theme has both sky + road layers
-      const sky = themeBg || getImage('bg_sky');
-      if (sky) {
-        const th = sky.naturalHeight * (GAME.W / sky.naturalWidth);
-        const offset = gameState.bgSky % th;
-        rc.save();
-        rc.globalAlpha = 0.85;
-        for (let y = -offset; y < GAME.H * 0.55; y += th) {
-          rc.drawImage(sky, 0, y, GAME.W, th);
-        }
-        rc.restore();
-      }
-      const th2 = themeRoad.naturalHeight * (GAME.W / themeRoad.naturalWidth);
-      const off2 = gameState.bgRoad % th2;
-      for (let y = -off2; y < GAME.H; y += th2) {
-        rc.drawImage(themeRoad, 0, y, GAME.W, th2);
-      }
-    } else if (themeBg) {
-      // Theme has only a single full-canvas background - object-fit: cover
-      const imgRatio = themeBg.naturalWidth / themeBg.naturalHeight;
+    // Helper function to draw static background with object-fit: cover
+    const drawStaticBg = (img, alpha = 0.95) => {
+      const imgRatio = img.naturalWidth / img.naturalHeight;
       const canvasRatio = GAME.W / GAME.H;
       let drawW, drawH, drawX, drawY;
       
@@ -253,29 +235,31 @@ export class Renderer {
       }
       
       rc.save();
-      rc.globalAlpha = 0.95;
-      rc.drawImage(themeBg, drawX, drawY, drawW, drawH);
+      rc.globalAlpha = alpha;
+      rc.drawImage(img, drawX, drawY, drawW, drawH);
       rc.restore();
+    };
+
+    if (themeRoad) {
+      // Theme has both sky + road layers - draw static
+      const sky = themeBg || getImage('bg_sky');
+      if (sky) {
+        drawStaticBg(sky, 0.85);
+      }
+      // Draw road static, covering lower portion
+      drawStaticBg(themeRoad, 1.0);
+    } else if (themeBg) {
+      // Theme has only a single full-canvas background - static object-fit: cover
+      drawStaticBg(themeBg, 0.95);
     } else {
-      // Fallback: base cyber assets
+      // Fallback: base cyber assets - static
       const sky = getImage('bg_sky');
       if (sky) {
-        const th = sky.naturalHeight * (GAME.W / sky.naturalWidth);
-        const offset = gameState.bgSky % th;
-        rc.save();
-        rc.globalAlpha = 0.85;
-        for (let y = -offset; y < GAME.H * 0.55; y += th) {
-          rc.drawImage(sky, 0, y, GAME.W, th);
-        }
-        rc.restore();
+        drawStaticBg(sky, 0.85);
       }
       const road = getImage('bg_road');
       if (road) {
-        const th = road.naturalHeight * (GAME.W / road.naturalWidth);
-        const offset = gameState.bgRoad % th;
-        for (let y = -offset; y < GAME.H; y += th) {
-          rc.drawImage(road, 0, y, GAME.W, th);
-        }
+        drawStaticBg(road, 1.0);
       }
     }
 
@@ -482,17 +466,47 @@ export class Renderer {
   }
 
   _drawNoteCap(rc, x, y, nw, col) {
+    // Enhanced note visibility with stronger glow and contrast
     if (gameState.noteShape === 'circle') {
-      const cx2 = x + nw / 2, cy2 = y + GAME.NOTE_H / 2, r = nw / 2 - 3;
+      const cx2 = x + nw / 2, cy2 = y + GAME.NOTE_H / 2, r = nw / 2 - 2;
+      
+      // Outer glow halo
+      rc.shadowBlur = 35;
+      rc.shadowColor = col;
       rc.fillStyle = col;
       rc.beginPath(); rc.arc(cx2, cy2, r, 0, Math.PI * 2); rc.fill();
-      rc.shadowBlur = 0; rc.strokeStyle = 'rgba(255,255,255,0.95)'; rc.lineWidth = 2;
+      
+      // Inner bright core for better visibility
+      rc.shadowBlur = 0;
+      const gradient = rc.createRadialGradient(cx2 - r * 0.3, cy2 - r * 0.3, 0, cx2, cy2, r);
+      gradient.addColorStop(0, 'rgba(255,255,255,0.9)');
+      gradient.addColorStop(0.5, col);
+      gradient.addColorStop(1, col);
+      rc.fillStyle = gradient;
+      rc.beginPath(); rc.arc(cx2, cy2, r - 2, 0, Math.PI * 2); rc.fill();
+      
+      // White edge highlight
+      rc.strokeStyle = 'rgba(255,255,255,0.95)'; rc.lineWidth = 2.5;
       rc.beginPath(); rc.arc(cx2, cy2, r, 0, Math.PI * 2); rc.stroke();
     } else {
+      // Outer glow
+      rc.shadowBlur = 35;
+      rc.shadowColor = col;
       rc.fillStyle = col;
-      rc.beginPath(); rc.roundRect(x, y, nw, GAME.NOTE_H, 6); rc.fill();
-      rc.shadowBlur = 0; rc.strokeStyle = 'rgba(255,255,255,0.9)'; rc.lineWidth = 2;
-      rc.beginPath(); rc.roundRect(x + 1, y + 1, nw - 2, GAME.NOTE_H - 2, 5); rc.stroke();
+      rc.beginPath(); rc.roundRect(x, y, nw, GAME.NOTE_H, 8); rc.fill();
+      
+      // Inner gradient for 3D effect
+      rc.shadowBlur = 0;
+      const gradient = rc.createLinearGradient(x, y, x, y + GAME.NOTE_H);
+      gradient.addColorStop(0, 'rgba(255,255,255,0.5)');
+      gradient.addColorStop(0.4, col);
+      gradient.addColorStop(1, col);
+      rc.fillStyle = gradient;
+      rc.beginPath(); rc.roundRect(x + 2, y + 2, nw - 4, GAME.NOTE_H - 4, 6); rc.fill();
+      
+      // White edge highlight
+      rc.strokeStyle = 'rgba(255,255,255,0.95)'; rc.lineWidth = 2.5;
+      rc.beginPath(); rc.roundRect(x + 1, y + 1, nw - 2, GAME.NOTE_H - 2, 7); rc.stroke();
     }
   }
 
@@ -702,8 +716,9 @@ export class Renderer {
   drawKeyButtons(rc) {
     const lc      = gameState.laneCount;
     const lw      = gameState.laneW;
-    const buttonY = gameState.hitY + 65;
-    const size    = Math.min(44, lw - 8);
+    // Position buttons further below hit line to prevent overlap
+    const buttonY = gameState.hitY + 80;
+    const size    = Math.min(52, lw - 6);
 
     for (let i = 0; i < lc; i++) {
       const cx = i * lw + lw / 2;
@@ -712,25 +727,44 @@ export class Renderer {
 
       rc.save();
       
-      // Button glow
-      rc.shadowBlur = pressed ? 28 : 10;
+      // Button glow - stronger for better visibility
+      rc.shadowBlur = pressed ? 35 : 15;
       rc.shadowColor = col;
       
-      // Button background
-      rc.fillStyle = pressed ? col : 'rgba(15, 5, 35, 0.85)';
+      // Glassmorphism button background
+      const grad = rc.createLinearGradient(cx - size / 2, buttonY - size / 2, cx + size / 2, buttonY + size / 2);
+      if (pressed) {
+        grad.addColorStop(0, col);
+        grad.addColorStop(1, col);
+      } else {
+        grad.addColorStop(0, 'rgba(25, 15, 50, 0.9)');
+        grad.addColorStop(1, 'rgba(15, 8, 35, 0.95)');
+      }
+      rc.fillStyle = grad;
       rc.strokeStyle = col;
-      rc.lineWidth = pressed ? 2.5 : 1.5;
+      rc.lineWidth = pressed ? 3 : 2;
       rc.beginPath();
-      rc.roundRect(cx - size / 2, buttonY - size / 2, size, size, 10);
+      rc.roundRect(cx - size / 2, buttonY - size / 2, size, size, 12);
       rc.fill();
       rc.stroke();
+      
+      // Inner glow highlight
+      if (!pressed) {
+        rc.strokeStyle = 'rgba(255,255,255,0.15)';
+        rc.lineWidth = 1;
+        rc.beginPath();
+        rc.roundRect(cx - size / 2 + 2, buttonY - size / 2 + 2, size - 4, size - 4, 10);
+        rc.stroke();
+      }
 
-      // Button label
-      rc.font = `bold ${lc === 6 ? 12 : 15}px Orbitron,monospace`;
+      // Button label - larger and more visible
+      const fontSize = lc === 6 ? 16 : 20;
+      rc.font = `bold ${fontSize}px Orbitron,monospace`;
       rc.textAlign = 'center';
       rc.textBaseline = 'middle';
-      rc.fillStyle = pressed ? '#000' : col;
-      rc.shadowBlur = 0;
+      rc.fillStyle = pressed ? '#000' : '#ffffff';
+      rc.shadowBlur = pressed ? 0 : 8;
+      rc.shadowColor = col;
       rc.fillText(gameState.getKeyLabel(i), cx, buttonY);
       rc.restore();
     }
@@ -828,16 +862,8 @@ export class Renderer {
     rc.restore();
   }
 
-  drawHUDFrame(rc) {
-    const frame = getImage('hud_frame');
-    if (frame) {
-      rc.save();
-      rc.globalAlpha = 0.70;
-      rc.drawImage(frame, 0, 0, GAME.W, GAME.H);
-      rc.restore();
-    }
-
-    // Song progress bar
+  drawProgressBar(rc) {
+    // Song progress bar (HUD frame removed for cleaner glassmorphism look)
     const audio = musicPlayer.audio;
     const audioDur = audio && isFinite(audio.duration) && audio.duration > 0
       ? audio.duration : null;
@@ -1454,30 +1480,20 @@ export class Renderer {
     for (let y = 0; y < GAME.H; y += 35) { rc.beginPath(); rc.moveTo(0,y); rc.lineTo(GAME.W,y); rc.stroke(); }
     rc.restore();
 
-    // Header
-    this.drawNeonText(rc, 'JACK IN  //  SHOP', GAME.W / 2, 46, {
-      font: '900 22px Orbitron,monospace',
+    // Header - centered title
+    this.drawNeonText(rc, 'SHOP', GAME.W / 2, 36, {
+      font: '900 24px Orbitron,monospace',
       color: NEON.PINK,
-      glowIntensity: 24,
+      glowIntensity: 26,
     });
 
-    // Credits display with glassmorphism
-    this.drawGlassPanel(rc, GAME.W - 130, 28, 115, 32, 8, { glowColor: NEON.GOLD, fillOpacity: 0.4 });
-    this.drawNeonText(rc, `◆ ${gameState.credits} CR`, GAME.W - 72, 44, {
-      font: 'bold 14px Orbitron,monospace',
+    // Credits display - positioned below title, centered
+    this.drawGlassPanel(rc, GAME.W / 2 - 70, 56, 140, 34, 10, { glowColor: NEON.GOLD, fillOpacity: 0.45 });
+    this.drawNeonText(rc, `◆ ${gameState.credits} CR`, GAME.W / 2, 73, {
+      font: 'bold 15px Orbitron,monospace',
       color: NEON.GOLD,
-      glowIntensity: 12,
+      glowIntensity: 14,
     });
-
-    // Active track name
-    const track = TRACKS[gameState.selectedTrack];
-    if (track) {
-      this.drawNeonText(rc, `♪  ${track.title.toUpperCase()}`, GAME.W / 2, 70, {
-        font: '400 10px Orbitron,monospace',
-        color: 'rgba(255,255,255,0.55)',
-        glowIntensity: 0,
-      });
-    }
 
     // Divider
     rc.save();
@@ -1488,15 +1504,15 @@ export class Renderer {
     rc.strokeStyle = grad;
     rc.lineWidth = 1;
     rc.beginPath();
-    rc.moveTo(20, 84); rc.lineTo(GAME.W - 20, 84);
+    rc.moveTo(20, 100); rc.lineTo(GAME.W - 20, 100);
     rc.stroke();
     rc.restore();
 
-    // Item cards
+    // Item cards - smaller cards with better spacing
     const items  = gameState.shopItems;
     const nCards = items.length;
-    const cardX  = 18, cardW = GAME.W - 36, cardH = 105, cardGap = 10;
-    const cardY0 = 96;
+    const cardX  = 16, cardW = GAME.W - 32, cardH = 90, cardGap = 8;
+    const cardY0 = 112;
 
     for (let i = 0; i < nCards; i++) {
       const item   = items[i];
@@ -1522,69 +1538,67 @@ export class Renderer {
         rc.restore();
       }
 
-      // Item name
-      const textX = cardX + 20;
-      this.drawNeonText(rc, item.name, textX, cy + 22, {
-        font: 'bold 14px Orbitron,monospace',
+      // Item name - compact layout
+      const textX = cardX + 18;
+      this.drawNeonText(rc, item.name, textX, cy + 18, {
+        font: 'bold 13px Orbitron,monospace',
         color: sel ? '#ffffff' : 'rgba(255,255,255,0.9)',
         glowIntensity: sel ? 10 : 0,
         align: 'left',
       });
 
-      // Description
-      const parts = item.desc.split('/').map(p => p.trim());
+      // Description - single line, compact
+      const desc = item.desc.replace(/\//g, '  •  ');
       rc.save();
-      rc.font = '400 10px Orbitron,monospace';
+      rc.font = '400 9px Orbitron,monospace';
       rc.textAlign = 'left';
       rc.textBaseline = 'top';
-      rc.fillStyle = 'rgba(255,255,255,0.9)';
-      parts.forEach((p, idx) => {
-        rc.fillText(p, textX, cy + 40 + idx * 16);
-      });
+      rc.fillStyle = 'rgba(255,255,255,0.8)';
+      rc.fillText(desc, textX, cy + 36);
       rc.restore();
 
-      // Cost and button
-      const rightX = cardX + cardW - 115;
+      // Cost display - right side, vertically centered
+      const rightX = cardX + cardW - 90;
 
       rc.save();
       rc.textAlign = 'center';
-      rc.textBaseline = 'top';
+      rc.textBaseline = 'middle';
       if (owned) {
-        rc.font = 'bold 12px Orbitron,monospace';
+        rc.font = 'bold 11px Orbitron,monospace';
         rc.fillStyle = 'rgba(255,255,255,0.6)';
-        rc.fillText('OWNED', rightX + 50, cy + 18);
+        rc.fillText('OWNED', rightX + 35, cy + 26);
       } else {
         const costColor = canBuy ? NEON.GOLD : '#ff8888';
-        rc.font = 'bold 20px Orbitron,monospace';
+        rc.font = 'bold 18px Orbitron,monospace';
         rc.fillStyle = costColor;
-        rc.shadowBlur = canBuy ? 12 : 0;
+        rc.shadowBlur = canBuy ? 10 : 0;
         rc.shadowColor = NEON.GOLD;
-        rc.fillText(item.cost === 0 ? 'FREE' : `${item.cost}`, rightX + 50, cy + 14);
+        rc.fillText(item.cost === 0 ? 'FREE' : `${item.cost}`, rightX + 35, cy + 22);
         if (item.cost > 0) {
-          rc.font = 'bold 10px Orbitron,monospace';
+          rc.font = 'bold 9px Orbitron,monospace';
           rc.shadowBlur = 0;
-          rc.fillStyle = canBuy ? 'rgba(255,204,0,0.75)' : 'rgba(255,120,120,0.6)';
-          rc.fillText('CR', rightX + 50, cy + 38);
+          rc.fillStyle = canBuy ? 'rgba(255,204,0,0.7)' : 'rgba(255,120,120,0.5)';
+          rc.fillText('CR', rightX + 35, cy + 40);
         }
       }
       rc.restore();
 
-      // Buy button
-      const btnW2 = 100, btnH2 = 28;
-      const btnX2 = rightX, btnY2 = cy + cardH - btnH2 - 12;
+      // Buy button - smaller and repositioned
+      const btnW2 = 70, btnH2 = 24;
+      const btnX2 = rightX, btnY2 = cy + cardH - btnH2 - 10;
       
       this.drawGlassPanel(rc, btnX2, btnY2, btnW2, btnH2, 6, {
         glowColor: owned ? 'rgba(255,255,255,0.3)' : canBuy ? NEON.PINK : '#ff6666',
         fillOpacity: owned ? 0.2 : canBuy ? 0.4 : 0.2,
-        glowIntensity: (sel && canBuy) ? 14 : 0,
+        glowIntensity: (sel && canBuy) ? 12 : 0,
       });
       
       rc.save();
-      rc.font = 'bold 10px Orbitron,monospace';
+      rc.font = 'bold 9px Orbitron,monospace';
       rc.textAlign = 'center';
       rc.textBaseline = 'middle';
-      rc.fillStyle = owned ? 'rgba(255,255,255,0.6)' : canBuy ? '#ff88ff' : '#ff8888';
-      rc.fillText(owned ? '[ OWNED ]' : canBuy ? '[ BUY ]' : '[ CANT BUY ]', btnX2 + btnW2 / 2, btnY2 + btnH2 / 2);
+      rc.fillStyle = owned ? 'rgba(255,255,255,0.5)' : canBuy ? '#ff88ff' : '#ff8888';
+      rc.fillText(owned ? 'OWNED' : canBuy ? 'BUY' : 'NO CR', btnX2 + btnW2 / 2, btnY2 + btnH2 / 2);
       rc.restore();
     }
 
