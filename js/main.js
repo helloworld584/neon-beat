@@ -66,6 +66,9 @@ class NeonBeatGame {
           update(deltaTime);
         }
       }
+      
+      // Always update ambient particles (cyberpunk atmosphere)
+      gameState.updateAmbientParticles(deltaTime);
 
       // Render
       this.renderer.render();
