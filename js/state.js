@@ -47,7 +47,53 @@ class GameState {
     this.petalParticles       = [];
     this.trunkHitCount        = 0;
 
+    // ── Ambient rising particles (always visible) ─────────────────
+    this.ambientParticles = [];
+    this._initAmbientParticles();
+
     this.reset();
+  }
+
+  _initAmbientParticles() {
+    // Spawn initial ambient particles across the screen
+    this.ambientParticles = [];
+    for (let i = 0; i < 35; i++) {
+      this.ambientParticles.push(this._createAmbientParticle(true));
+    }
+  }
+
+  _createAmbientParticle(randomY = false) {
+    const isCyan = Math.random() < 0.5;
+    return {
+      x: Math.random() * GAME.W,
+      y: randomY ? Math.random() * GAME.H : GAME.H + 20,
+      vx: (Math.random() - 0.5) * 0.015,
+      vy: -(0.02 + Math.random() * 0.04), // Rise upward
+      size: 1.5 + Math.random() * 3,
+      alpha: 0.2 + Math.random() * 0.5,
+      color: isCyan ? '#00FFFF' : '#FF00FF',
+      pulse: Math.random() * Math.PI * 2,
+      pulseSpeed: 0.001 + Math.random() * 0.002,
+    };
+  }
+
+  updateAmbientParticles(dt) {
+    for (const p of this.ambientParticles) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.pulse += p.pulseSpeed * dt;
+      
+      // Slight horizontal drift
+      p.x += Math.sin(p.pulse) * 0.003 * dt;
+    }
+    
+    // Remove particles that went off screen and spawn new ones
+    this.ambientParticles = this.ambientParticles.filter(p => p.y > -20);
+    
+    // Maintain particle count
+    while (this.ambientParticles.length < 35) {
+      this.ambientParticles.push(this._createAmbientParticle(false));
+    }
   }
 
   // ── Theme helpers ─────────────────────────────────────────────

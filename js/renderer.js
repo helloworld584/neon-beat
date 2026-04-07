@@ -39,21 +39,27 @@ export class Renderer {
 
     if (gameState.gameState === GAME_STATES.TITLE) {
       this.renderTitle(this.offCtx);
+      this.drawAmbientParticles(this.offCtx);
       this.drawScanlines(this.offCtx);
     } else if (gameState.gameState === GAME_STATES.MUSIC_SELECT) {
       this.renderMusicSelect(this.offCtx);
+      this.drawAmbientParticles(this.offCtx);
       this.drawScanlines(this.offCtx);
     } else if (gameState.gameState === GAME_STATES.SHOP) {
       this.renderShop(this.offCtx);
+      this.drawAmbientParticles(this.offCtx);
       this.drawScanlines(this.offCtx);
     } else if (gameState.gameState === GAME_STATES.KEYBINDINGS) {
       this.renderKeyBindings(this.offCtx);
+      this.drawAmbientParticles(this.offCtx);
       this.drawScanlines(this.offCtx);
     } else if (gameState.gameState === GAME_STATES.SETTINGS) {
       this.renderSettings(this.offCtx);
+      this.drawAmbientParticles(this.offCtx);
       this.drawScanlines(this.offCtx);
     } else if (gameState.gameState === GAME_STATES.THEME_SELECT) {
       this.renderThemeSelect(this.offCtx);
+      this.drawAmbientParticles(this.offCtx);
       this.drawScanlines(this.offCtx);
     } else {
       this.drawScrollBG(this.offCtx);
@@ -68,6 +74,7 @@ export class Renderer {
       this.drawTrackName(this.offCtx);
       this.drawJudgment(this.offCtx);
       this.drawGimmickOverlay(this.offCtx);
+      this.drawAmbientParticles(this.offCtx);
       this.drawScanlines(this.offCtx);
     }
 
@@ -83,6 +90,7 @@ export class Renderer {
     // Game over overlay
     if (gameState.gameState === GAME_STATES.GAMEOVER) {
       this.renderGameOver(this.ctx);
+      this.drawAmbientParticles(this.ctx);
       this.drawScanlines(this.ctx);
     }
 
@@ -913,6 +921,36 @@ export class Renderer {
     for (let y = 0; y < GAME.H; y += 3) {
       rc.fillRect(0, y, GAME.W, 1);
     }
+    rc.restore();
+  }
+
+  // ── Ambient Rising Particles (Cyberpunk Atmosphere) ─────────────
+  drawAmbientParticles(rc) {
+    rc.save();
+    
+    for (const p of gameState.ambientParticles) {
+      // Pulsing alpha effect
+      const pulseAlpha = p.alpha * (0.7 + 0.3 * Math.sin(p.pulse));
+      
+      rc.globalAlpha = pulseAlpha;
+      rc.fillStyle = p.color;
+      rc.shadowBlur = p.size * 4;
+      rc.shadowColor = p.color;
+      
+      // Draw particle as a small glowing circle
+      rc.beginPath();
+      rc.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      rc.fill();
+      
+      // Inner bright core
+      rc.shadowBlur = 0;
+      rc.globalAlpha = pulseAlpha * 0.8;
+      rc.fillStyle = '#ffffff';
+      rc.beginPath();
+      rc.arc(p.x, p.y, p.size * 0.4, 0, Math.PI * 2);
+      rc.fill();
+    }
+    
     rc.restore();
   }
 
